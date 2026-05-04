@@ -120,22 +120,43 @@
         <button class="btn-gold" onclick="carregarTudo()">↺ Atualizar</button>
       </div>
       <div class="main-content">
-        <div class="grid-4" id="kpis-cockpit">
+
+        <!-- KPIs linha 1 -->
+        <div class="grid-4">
           <div class="card"><div class="card-label">Patrimônio Total</div><div class="card-value" id="kpi-patrimonio">—</div><div class="card-sub" id="kpi-retorno">carregando...</div></div>
           <div class="card"><div class="card-label">Investido</div><div class="card-value" id="kpi-investido">—</div><div class="card-sub">valor aportado</div></div>
           <div class="card"><div class="card-label">Resultado</div><div class="card-value" id="kpi-resultado">—</div><div class="card-sub" id="kpi-resultado-pct">—</div></div>
-          <div class="card"><div class="card-label">Câmbio USD/BRL</div><div class="card-value" id="kpi-cambio">—</div><div class="card-sub">tempo real</div></div>
+          <div class="card" id="regime-macro"><div class="card-label">Regime Macro</div><div class="card-value">—</div></div>
         </div>
+
+        <!-- Linha 2: alocação + mercado -->
         <div class="grid-2">
           <div class="card">
             <div class="section-title">Alocação por Classe</div>
             <div id="alocacao-lista"><div class="loading">Carregando...</div></div>
           </div>
-          <div class="card">
-            <div class="section-title">Ibovespa</div>
-            <div id="ibov-info"><div class="loading">Carregando...</div></div>
+          <div>
+            <div class="card" style="margin-bottom:12px;">
+              <div class="section-title">Ibovespa</div>
+              <div id="ibov-info"><div class="loading">Carregando...</div></div>
+            </div>
+            <div class="card">
+              <div class="section-title">Câmbio USD/BRL</div>
+              <div class="card-value" id="kpi-cambio" style="font-size:28px;">—</div>
+              <div class="card-sub">tempo real</div>
+            </div>
           </div>
         </div>
+
+        <!-- Linha 3: ativos da carteira -->
+        <div class="card">
+          <div class="section-title">Meus Ativos — Performance</div>
+          <div id="top-ativos"><div class="loading">Carregando...</div></div>
+          <div style="margin-top:12px;">
+            <button class="btn-ghost" onclick="showPanel('carteira'); event.stopPropagation();" style="font-size:11px;">Ver carteira completa →</button>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -312,8 +333,6 @@
 </div><!-- /layout -->
 
 <script>
-const API = '';
-
 function showPanel(id) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -335,176 +354,9 @@ function fmtMoeda(v) {
   return 'R$ ' + fmt(v);
 }
 
-// ── COCKPIT ──────────────────────────────────────────────
-
-async function carregarCockpit() {
-  document.getElementById('data-hora').textContent =
-    new Date().toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' });
-
-  try {
-    const [resumo, ibov, cambio] = await Promise.all([
-      fetch('/carteira/resumo').then(r => r.json()),
-      fetch('/mercado/ibovespa').then(r => r.json()),
-      fetch('/mercado/cambio').then(r => r.json())
-    ]);
-
-    document.getElementById('kpi-patrimonio').textContent = fmtMoeda(resumo.patrimonio_total);
-    document.getElementById('kpi-investido').textContent = fmtMoeda(resumo.total_investido);
-    document.getElementById('kpi-cambio').textContent = 'R$ ' + fmt(resumo.cambio_usd_brl);
-
-    const res = resumo.retorno_total_rs;
-    const resPct = resumo.retorno_total_pct;
-    document.getElementById('kpi-resultado').textContent = fmtMoeda(res);
-    const sub = document.getElementById('kpi-resultado-pct');
-    sub.textContent = (resPct >= 0 ? '▲ +' : '▼ ') + fmt(resPct) + '%';
-    sub.className = 'card-sub ' + (resPct >= 0 ? 'pos' : 'neg');
-
-    const retSub = document.getElementById('kpi-retorno');
-    retSub.textContent = (resPct >= 0 ? '▲ +' : '▼ ') + fmt(resPct) + '% total';
-    retSub.className = 'card-sub ' + (resPct >= 0 ? 'pos' : 'neg');
-
-    // Alocação
-    const aloc = document.getElementById('alocacao-lista');
-    const total = resumo.patrimonio_total;
-    let html = '';
-    const cores = { ACAO: '#1A1814', FII: '#C8860A', ETF_BR: '#1A5C8A', ETF_EUA: '#1E6E3A', TESOURO: '#6B4F1E', RF: '#888' };
-    for (const [classe, valor] of Object.entries(resumo.por_classe)) {
-      const pct = total > 0 ? (valor / total * 100) : 0;
-      const cor = cores[classe] || '#888';
-      html += `<div style="margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
-          <span style="font-weight:600;">${classe}</span>
-          <span>${fmtMoeda(valor)} · <strong>${fmt(pct)}%</strong></span>
-        </div>
-        <div style="background:#F0EDE6;border-radius:3px;height:6px;overflow:hidden;">
-          <div style="width:${pct}%;height:100%;background:${cor};border-radius:3px;"></div>
-        </div>
-      </div>`;
-    }
-    aloc.innerHTML = html || '<div class="loading">Nenhum ativo cadastrado</div>';
-
-    // Ibovespa
-    const ibovEl = document.getElementById('ibov-info');
-    const ibovVar = ibov.variacao_dia || 0;
-    ibovEl.innerHTML = `
-      <div style="font-size:28px;font-weight:700;">${fmt(ibov.preco, 0)}</div>
-      <div class="card-sub ${ibovVar >= 0 ? 'pos' : 'neg'}">${ibovVar >= 0 ? '▲ +' : '▼ '}${fmt(ibovVar)}% hoje</div>
-    `;
-  } catch(e) {
-    console.error(e);
-  }
-}
-
-// ── CARTEIRA ─────────────────────────────────────────────
-
-async function carregarCarteira() {
-  const tbody = document.getElementById('tabela-carteira');
-  tbody.innerHTML = '<tr><td colspan="9" class="loading">Buscando preços em tempo real...</td></tr>';
-
-  try {
-    const ativos = await fetch('/ativos').then(r => r.json());
-
-    if (!ativos.length) {
-      tbody.innerHTML = '<tr><td colspan="9" class="loading">Nenhum ativo cadastrado. Vá em Cadastrar Ativo.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = ativos.map(a => {
-      const varCls = a.variacao_dia >= 0 ? 'p-green' : 'p-red';
-      const varSinal = a.variacao_dia >= 0 ? '▲ +' : '▼ ';
-      const retCls = a.retorno_pct >= 0 ? 'p-green' : 'p-red';
-      const retSinal = a.retorno_pct >= 0 ? '+' : '';
-      const classePill = {ACAO:'p-gray', FII:'p-gold', ETF_BR:'p-blue', ETF_EUA:'p-green', TESOURO:'p-blue'}[a.classe] || 'p-gray';
-
-      return `<tr>
-        <td><div class="ticker">${a.ticker}</div><div class="nome-dim">${a.nome || ''}</div></td>
-        <td><span class="pill ${classePill}">${a.classe}</span></td>
-        <td>${fmt(a.quantidade, 0)}</td>
-        <td>${fmtMoeda(a.preco_medio)}</td>
-        <td>${fmtMoeda(a.preco_atual)}</td>
-        <td><span class="pill ${varCls}">${varSinal}${fmt(a.variacao_dia)}%</span></td>
-        <td>${fmtMoeda(a.valor_investido)}</td>
-        <td>${fmtMoeda(a.valor_atual)}</td>
-        <td><span class="pill ${retCls}">${retSinal}${fmt(a.retorno_pct)}%</span></td>
-      </tr>`;
-    }).join('');
-  } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="9" class="loading">Erro ao carregar carteira.</td></tr>';
-  }
-}
-
-// ── CADASTRO ─────────────────────────────────────────────
-
-async function cadastrarAtivo() {
-  const msg = document.getElementById('msg-cadastro');
-  const ticker = document.getElementById('f-ticker').value.trim();
-  const nome = document.getElementById('f-nome').value.trim();
-  const classe = document.getElementById('f-classe').value;
-  const mercado = document.getElementById('f-mercado').value;
-  const quantidade = parseFloat(document.getElementById('f-quantidade').value);
-  const preco = parseFloat(document.getElementById('f-preco').value);
-
-  if (!ticker || !quantidade || !preco) {
-    msg.innerHTML = '<div class="alert alert-red">Preencha Ticker, Quantidade e Preço Médio.</div>';
-    return;
-  }
-
-  try {
-    const res = await fetch('/ativos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ticker, nome, classe, mercado, quantidade, preco_medio: preco })
-    });
-    const data = await res.json();
-
-    if (res.ok) {
-      msg.innerHTML = `<div class="alert alert-green">✓ ${data.mensagem}</div>`;
-      document.getElementById('f-ticker').value = '';
-      document.getElementById('f-nome').value = '';
-      document.getElementById('f-quantidade').value = '';
-      document.getElementById('f-preco').value = '';
-    } else {
-      msg.innerHTML = `<div class="alert alert-red">✗ ${data.detail}</div>`;
-    }
-  } catch(e) {
-    msg.innerHTML = '<div class="alert alert-red">Erro ao cadastrar ativo.</div>';
-  }
-}
-
-// ── PREÇO AO VIVO ─────────────────────────────────────────
-
-async function buscarPreco() {
-  const ticker = document.getElementById('m-ticker').value.trim();
-  const mercado = document.getElementById('m-mercado').value;
-  const el = document.getElementById('resultado-preco');
-
-  if (!ticker) return;
-
-  el.innerHTML = '<div class="loading">Buscando...</div>';
-
-  try {
-    const r = await fetch(`/mercado/preco/${ticker}?mercado=${mercado}`).then(r => r.json());
-    const moeda = mercado === 'EUA' ? 'US$' : 'R$';
-    const varCls = (r.variacao_dia || 0) >= 0 ? 'pos' : 'neg';
-    const varSinal = (r.variacao_dia || 0) >= 0 ? '▲ +' : '▼ ';
-
-    el.innerHTML = `
-      <div style="margin-top:16px;padding:16px;background:#F9F7F4;border-radius:6px;border:1px solid #DDD9D0;">
-        <div style="font-size:13px;color:#888;margin-bottom:4px;">${r.nome || ticker}</div>
-        <div style="font-size:32px;font-weight:700;">${moeda} ${fmt(r.preco)}</div>
-        <div class="card-sub ${varCls}" style="margin-top:4px;">${varSinal}${fmt(r.variacao_dia)}% hoje</div>
-        <div style="font-size:10px;color:#bbb;margin-top:8px;">Fonte: ${r.fonte} · ${new Date().toLocaleTimeString('pt-BR')}</div>
-      </div>`;
-  } catch(e) {
-    el.innerHTML = '<div class="alert alert-red">Ticker não encontrado.</div>';
-  }
-}
-
-// ── INIT ──────────────────────────────────────────────────
-
-function carregarTudo() { carregarCockpit(); }
 carregarCockpit();
 </script>
+<script src="/frontend/js/cockpit.js"></script>
 <script src="/frontend/js/radar.js"></script>
 <script src="/frontend/js/config.js"></script>
 </body>
