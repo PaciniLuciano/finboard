@@ -234,3 +234,44 @@ def radar(db: Session = Depends(get_db)):
         "juro_real": macro["detalhes"]["juro_real"],
         "ativos": scores
     }
+
+# ROTAS CONFIGURACOES
+from pydantic import BaseModel as BM
+class ConfigInput(BM):
+    selic_previsao_12m: float = None
+    selic_pessimista: float = None
+    selic_otimista: float = None
+    fonte_selic: str = "manual"
+
+@app.get("/configuracoes")
+def get_configuracoes(db: Session = Depends(get_db)):
+    from backend.database import Configuracao
+    import json
+    cfgs = db.query(Configuracao).all()
+    resultado = {}
+    for c in cfgs:
+        try:
+            resultado[c.chave] = json.loads(c.valor)
+        except:
+            resultado[c.chave] = c.valor
+    return resultado
+
+@app.post("/configuracoes")
+def salvar_configuracoes(cfg: ConfigInput, db: Session = Depends(get_db)):
+    from backend.database import Configuracao
+    import json
+    dados = {
+        "selic_previsao_12m": cfg.selic_previsao_12m,
+        "selic_pessimista": cfg.selic_pessimista,
+        "selic_otimista": cfg.selic_otimista,
+        "fonte_selic": cfg.fonte_selic
+    }
+    for chave, valor in dados.items():
+        if valor is not None:
+            existente = db.query(Configuracao).filter(Configuracao.chave == chave).first()
+            if existente:
+                existente.valor = json.dumps(valor)
+            else:
+                db.add(Configuracao(chave=chave, valor=json.dumps(valor)))
+    db.commit()
+    return {"mensagem": "Configuracoes salvas com sucesso"}
