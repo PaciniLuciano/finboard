@@ -106,6 +106,7 @@
     <div class="nav-group">
       <div class="nav-label">Mercado</div>
       <button class="nav-item" onclick="showPanel('radar')"><span class="icon">◉</span> Radar</button>
+      <button class="nav-item" onclick="showPanel('dividendos')"><span class="icon">💰</span> Dividendos</button>
       <button class="nav-item" onclick="showPanel('rendafixa')"><span class="icon">🏦</span> Renda Fixa</button>
       <button class="nav-item" onclick="showPanel('mercado')"><span class="icon">⊙</span> Preços ao Vivo</button>
     </div>
@@ -300,6 +301,90 @@
             </div>
           </div>
           <div id="resultado-preco"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DIVIDENDOS -->
+    <div id="panel-dividendos" class="panel">
+      <div class="main-header">
+        <div><h2>Dividendos & Proventos</h2><div class="sub">Retorno total: valorização + dividendos recebidos</div></div>
+        <button class="btn-primary" onclick="carregarDividendos();carregarRetornoTotal();">↺ Atualizar</button>
+      </div>
+      <div class="main-content">
+        <div id="msg-dividendo"></div>
+
+        <!-- Importação automática -->
+        <div class="card" style="margin-bottom:20px;border-color:#C8860A;background:#FFF8EC;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div style="font-weight:700;font-size:14px;">⚡ Importação Automática de Proventos</div>
+              <div style="font-size:12px;color:#888;margin-top:4px;">Busca todos os dividendos pagos desde a data de compra via yfinance. Não duplica registros.</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn-gold" onclick="importarTodos()">↓ Importar Todos</button>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input type="text" id="import-ticker" placeholder="Ticker específico"
+                  style="padding:8px 12px;border:1px solid #DDD9D0;border-radius:6px;font-size:12px;width:140px;"
+                  oninput="this.value=this.value.toUpperCase()">
+                <button class="btn-primary" onclick="importarTicker()">↓ Importar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="resumo-dividendos"></div>
+
+        <!-- Retorno Total FIIs -->
+        <div class="section-title">Retorno Total — FIIs (Cota + Dividendos)</div>
+        <div id="retorno-total-lista"><div class="loading">Carregando...</div></div>
+
+        <div style="height:20px;"></div>
+
+        <!-- Formulário -->
+        <div class="form-card">
+          <div class="form-title">+ Registrar Provento Recebido</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Ticker</label>
+              <input type="text" id="div-ticker" placeholder="Ex: HGLG11" oninput="this.value=this.value.toUpperCase()">
+            </div>
+            <div class="form-group">
+              <label>Valor por Cota (R$)</label>
+              <input type="number" id="div-valor-cota" placeholder="Ex: 1.05" step="0.01">
+            </div>
+            <div class="form-group">
+              <label>Quantidade de Cotas</label>
+              <input type="number" id="div-quantidade" placeholder="Ex: 100" step="1">
+            </div>
+            <div class="form-group">
+              <label>Data do Pagamento</label>
+              <input type="date" id="div-data">
+            </div>
+            <div class="form-group">
+              <label>Tipo</label>
+              <select id="div-tipo">
+                <option value="PROVENTO">Provento (FII)</option>
+                <option value="DIVIDENDO">Dividendo (Ação)</option>
+                <option value="JCP">JCP</option>
+                <option value="RENDIMENTO">Rendimento</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn-gold" onclick="registrarDividendo()">+ Registrar Provento</button>
+        </div>
+
+        <!-- Histórico -->
+        <div class="section-title" style="margin-top:20px;">Histórico de Proventos</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Ticker</th><th>Tipo</th><th>Valor/Cota</th>
+              <th>Cotas</th><th>Total Recebido</th><th>Data</th>
+            </tr></thead>
+            <tbody id="tabela-dividendos">
+              <tr><td colspan="6" class="loading">Carregando...</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -511,6 +596,7 @@
 </div><!-- /layout -->
 
 <script src="/frontend/js/carteira.js"></script>
+<script src="/frontend/js/dividendos.js"></script>
 <script src="/frontend/js/rendafixa.js"></script>
 <script src="/frontend/js/cockpit.js"></script>
 <script src="/frontend/js/radar.js"></script>
@@ -525,6 +611,7 @@ function showPanel(id) {
   if (id === 'cockpit') carregarCockpit();
   if (id === 'radar') carregarRadar();
   if (id === 'rendafixa') carregarRendaFixa();
+  if (id === 'dividendos') { carregarDividendos(); carregarRetornoTotal(); }
   if (id === 'configuracoes') carregarConfig();
 }
 
