@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #F5F3EE; color: #1A1814; }
+  .layout { display: flex; min-height: 100vh; }
+
+  /* SIDEBAR */
+  .sidebar { width: 220px; background: #1A1814; padding: 24px 0; display: flex; flex-direction: column; flex-shrink: 0; }
+  .sidebar-logo { padding: 0 20px 24px; border-bottom: 1px solid #2A2820; margin-bottom: 8px; }
+  .sidebar-logo .brand { font-size: 18px; font-weight: 700; color: white; letter-spacing: 0.06em; }
+  .sidebar-logo .tag { font-size: 10px; color: #555; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .nav-group { padding: 16px 12px 8px; }
+  .nav-label { font-size: 9px; color: #444; letter-spacing: 0.14em; text-transform: uppercase; padding: 0 8px; margin-bottom: 4px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: #888; border: none; background: transparent; width: 100%; text-align: left; transition: all 0.12s; }
+  .nav-item:hover { background: #252320; color: #CCC; }
+  .nav-item.active { background: #C8860A; color: #1A1814; font-weight: 700; }
+  .nav-item .icon { font-size: 15px; width: 20px; text-align: center; }
+
+  /* MAIN */
+  .main { flex: 1; display: flex; flex-direction: column; }
+  .main-header { padding: 20px 28px; border-bottom: 1px solid #DDD9D0; background: white; display: flex; align-items: center; justify-content: space-between; }
+  .main-header h2 { font-size: 20px; font-weight: 700; }
+  .main-header .sub { font-size: 11px; color: #888; margin-top: 3px; }
+  .main-content { padding: 24px 28px; flex: 1; }
+
+  /* PANELS */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* CARDS */
+  .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 20px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .card { background: white; border: 1px solid #DDD9D0; border-radius: 8px; padding: 16px; }
+  .card-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #888; margin-bottom: 6px; }
+  .card-value { font-size: 24px; font-weight: 700; color: #1A1814; }
+  .card-sub { font-size: 11px; color: #888; margin-top: 4px; }
+  .card-sub.pos { color: #1E6E3A; }
+  .card-sub.neg { color: #8B1A1A; }
+
+  /* TABLE */
+  .table-wrap { background: white; border: 1px solid #DDD9D0; border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #F5F3EE; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #888; padding: 10px 14px; text-align: left; border-bottom: 1px solid #DDD9D0; font-weight: 600; }
+  th:not(:first-child) { text-align: right; }
+  td { padding: 12px 14px; border-bottom: 1px solid #F0EDE6; }
+  td:not(:first-child) { text-align: right; }
+  tr:hover td { background: #F9F7F4; }
+  tr:last-child td { border-bottom: none; }
+  .ticker { font-weight: 700; font-size: 13px; }
+  .nome-dim { font-size: 10px; color: #888; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+  .p-green { background: #EDF7F1; color: #1E6E3A; }
+  .p-red { background: #FDF0F0; color: #8B1A1A; }
+  .p-gold { background: #FFF8EC; color: #C8860A; }
+  .p-blue { background: #EEF5FB; color: #1A5C8A; }
+  .p-gray { background: #F5F3EE; color: #888; }
+
+  /* FORM */
+  .form-card { background: white; border: 1px solid #DDD9D0; border-radius: 8px; padding: 24px; margin-bottom: 20px; }
+  .form-title { font-size: 15px; font-weight: 700; margin-bottom: 20px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group label { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.06em; }
+  .form-group input, .form-group select { padding: 10px 12px; border: 1px solid #DDD9D0; border-radius: 6px; font-size: 13px; color: #1A1814; background: #F9F7F4; }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: #C8860A; background: white; }
+  .btn-primary { padding: 10px 24px; background: #1A1814; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-primary:hover { background: #333; }
+  .btn-gold { padding: 10px 24px; background: #C8860A; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+  /* LOADING */
+  .loading { color: #888; font-size: 13px; padding: 20px; text-align: center; }
+
+  /* ALERT */
+  .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+  .alert-green { background: #EDF7F1; color: #1E6E3A; border-left: 3px solid #1E6E3A; }
+  .alert-red { background: #FDF0F0; color: #8B1A1A; border-left: 3px solid #8B1A1A; }
+
+  /* SECTION TITLE */
+  .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #888; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #DDD9D0; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="brand">💹 FINBOARD</div>
+      <div class="tag">Portfólio + Oportunidades</div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">Principal</div>
+      <button class="nav-item active" onclick="showPanel('cockpit')"><span class="icon">⊞</span> Cockpit</button>
+      <button class="nav-item" onclick="showPanel('carteira')"><span class="icon">◎</span> Minha Carteira</button>
+      <button class="nav-item" onclick="showPanel('cadastro')"><span class="icon">＋</span> Cadastrar Ativo</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">Mercado</div>
+      <button class="nav-item" onclick="showPanel('mercado')"><span class="icon">◉</span> Preços ao Vivo</button>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- COCKPIT -->
+    <div id="panel-cockpit" class="panel active">
+      <div class="main-header">
+        <div><h2>Cockpit</h2><div class="sub" id="data-hora">Carregando...</div></div>
+        <button class="btn-gold" onclick="carregarTudo()">↺ Atualizar</button>
+      </div>
+      <div class="main-content">
+        <div class="grid-4" id="kpis-cockpit">
+          <div class="card"><div class="card-label">Patrimônio Total</div><div class="card-value" id="kpi-patrimonio">—</div><div class="card-sub" id="kpi-retorno">carregando...</div></div>
+          <div class="card"><div class="card-label">Investido</div><div class="card-value" id="kpi-investido">—</div><div class="card-sub">valor aportado</div></div>
+          <div class="card"><div class="card-label">Resultado</div><div class="card-value" id="kpi-resultado">—</div><div class="card-sub" id="kpi-resultado-pct">—</div></div>
+          <div class="card"><div class="card-label">Câmbio USD/BRL</div><div class="card-value" id="kpi-cambio">—</div><div class="card-sub">tempo real</div></div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="section-title">Alocação por Classe</div>
+            <div id="alocacao-lista"><div class="loading">Carregando...</div></div>
+          </div>
+          <div class="card">
+            <div class="section-title">Ibovespa</div>
+            <div id="ibov-info"><div class="loading">Carregando...</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARTEIRA -->
+    <div id="panel-carteira" class="panel">
+      <div class="main-header">
+        <div><h2>Minha Carteira</h2><div class="sub">Todos os ativos com performance em tempo real</div></div>
+        <button class="btn-primary" onclick="carregarCarteira()">↺ Atualizar</button>
+      </div>
+      <div class="main-content">
+        <div id="msg-carteira"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Ativo</th><th>Classe</th><th>Qtd.</th>
+              <th>Preço Médio</th><th>Preço Atual</th>
+              <th>Var. Dia</th><th>Valor Investido</th>
+              <th>Valor Atual</th><th>Retorno</th>
+            </tr></thead>
+            <tbody id="tabela-carteira"><tr><td colspan="9" class="loading">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CADASTRO -->
+    <div id="panel-cadastro" class="panel">
+      <div class="main-header">
+        <div><h2>Cadastrar Ativo</h2><div class="sub">Adicione ativos à sua carteira</div></div>
+      </div>
+      <div class="main-content">
+        <div id="msg-cadastro"></div>
+        <div class="form-card">
+          <div class="form-title">Novo Ativo</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Ticker</label>
+              <input type="text" id="f-ticker" placeholder="Ex: PETR4" oninput="this.value = this.value.toUpperCase()">
+            </div>
+            <div class="form-group">
+              <label>Nome (opcional)</label>
+              <input type="text" id="f-nome" placeholder="Ex: Petrobras PN">
+            </div>
+            <div class="form-group">
+              <label>Classe</label>
+              <select id="f-classe">
+                <option value="ACAO">Ação B3</option>
+                <option value="FII">FII</option>
+                <option value="ETF_BR">ETF Brasileiro</option>
+                <option value="ETF_EUA">ETF Americano</option>
+                <option value="TESOURO">Tesouro Direto</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Mercado</label>
+              <select id="f-mercado">
+                <option value="BR">Brasil</option>
+                <option value="EUA">EUA</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quantidade</label>
+              <input type="number" id="f-quantidade" placeholder="Ex: 100">
+            </div>
+            <div class="form-group">
+              <label>Preço Médio (R$)</label>
+              <input type="number" id="f-preco" placeholder="Ex: 38.50" step="0.01">
+            </div>
+          </div>
+          <button class="btn-gold" onclick="cadastrarAtivo()">+ Cadastrar Ativo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MERCADO -->
+    <div id="panel-mercado" class="panel">
+      <div class="main-header">
+        <div><h2>Preços ao Vivo</h2><div class="sub">Consulte qualquer ativo em tempo real</div></div>
+      </div>
+      <div class="main-content">
+        <div class="form-card">
+          <div class="form-grid" style="grid-template-columns: 1fr 1fr auto;">
+            <div class="form-group">
+              <label>Ticker</label>
+              <input type="text" id="m-ticker" placeholder="Ex: VALE3" oninput="this.value = this.value.toUpperCase()">
+            </div>
+            <div class="form-group">
+              <label>Mercado</label>
+              <select id="m-mercado">
+                <option value="BR">Brasil</option>
+                <option value="EUA">EUA</option>
+              </select>
+            </div>
+            <div class="form-group" style="justify-content: flex-end;">
+              <label>&nbsp;</label>
+              <button class="btn-gold" onclick="buscarPreco()">Buscar</button>
+            </div>
+          </div>
+          <div id="resultado-preco"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+const API = '';
+
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (id === 'carteira') carregarCarteira();
+  if (id === 'cockpit') carregarCockpit();
+}
+
+function fmt(v, decimais = 2) {
+  if (v === null || v === undefined) return '—';
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: decimais, maximumFractionDigits: decimais });
+}
+
+function fmtMoeda(v) {
+  if (v === null || v === undefined) return '—';
+  return 'R$ ' + fmt(v);
+}
+
+// ── COCKPIT ──────────────────────────────────────────────
+
+async function carregarCockpit() {
+  document.getElementById('data-hora').textContent =
+    new Date().toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' });
+
+  try {
+    const [resumo, ibov, cambio] = await Promise.all([
+      fetch('/carteira/resumo').then(r => r.json()),
+      fetch('/mercado/ibovespa').then(r => r.json()),
+      fetch('/mercado/cambio').then(r => r.json())
+    ]);
+
+    document.getElementById('kpi-patrimonio').textContent = fmtMoeda(resumo.patrimonio_total);
+    document.getElementById('kpi-investido').textContent = fmtMoeda(resumo.total_investido);
+    document.getElementById('kpi-cambio').textContent = 'R$ ' + fmt(resumo.cambio_usd_brl);
+
+    const res = resumo.retorno_total_rs;
+    const resPct = resumo.retorno_total_pct;
+    document.getElementById('kpi-resultado').textContent = fmtMoeda(res);
+    const sub = document.getElementById('kpi-resultado-pct');
+    sub.textContent = (resPct >= 0 ? '▲ +' : '▼ ') + fmt(resPct) + '%';
+    sub.className = 'card-sub ' + (resPct >= 0 ? 'pos' : 'neg');
+
+    const retSub = document.getElementById('kpi-retorno');
+    retSub.textContent = (resPct >= 0 ? '▲ +' : '▼ ') + fmt(resPct) + '% total';
+    retSub.className = 'card-sub ' + (resPct >= 0 ? 'pos' : 'neg');
+
+    // Alocação
+    const aloc = document.getElementById('alocacao-lista');
+    const total = resumo.patrimonio_total;
+    let html = '';
+    const cores = { ACAO: '#1A1814', FII: '#C8860A', ETF_BR: '#1A5C8A', ETF_EUA: '#1E6E3A', TESOURO: '#6B4F1E', RF: '#888' };
+    for (const [classe, valor] of Object.entries(resumo.por_classe)) {
+      const pct = total > 0 ? (valor / total * 100) : 0;
+      const cor = cores[classe] || '#888';
+      html += `<div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+          <span style="font-weight:600;">${classe}</span>
+          <span>${fmtMoeda(valor)} · <strong>${fmt(pct)}%</strong></span>
+        </div>
+        <div style="background:#F0EDE6;border-radius:3px;height:6px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:${cor};border-radius:3px;"></div>
+        </div>
+      </div>`;
+    }
+    aloc.innerHTML = html || '<div class="loading">Nenhum ativo cadastrado</div>';
+
+    // Ibovespa
+    const ibovEl = document.getElementById('ibov-info');
+    const ibovVar = ibov.variacao_dia || 0;
+    ibovEl.innerHTML = `
+      <div style="font-size:28px;font-weight:700;">${fmt(ibov.preco, 0)}</div>
+      <div class="card-sub ${ibovVar >= 0 ? 'pos' : 'neg'}">${ibovVar >= 0 ? '▲ +' : '▼ '}${fmt(ibovVar)}% hoje</div>
+    `;
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+// ── CARTEIRA ─────────────────────────────────────────────
+
+async function carregarCarteira() {
+  const tbody = document.getElementById('tabela-carteira');
+  tbody.innerHTML = '<tr><td colspan="9" class="loading">Buscando preços em tempo real...</td></tr>';
+
+  try {
+    const ativos = await fetch('/ativos').then(r => r.json());
+
+    if (!ativos.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="loading">Nenhum ativo cadastrado. Vá em Cadastrar Ativo.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = ativos.map(a => {
+      const varCls = a.variacao_dia >= 0 ? 'p-green' : 'p-red';
+      const varSinal = a.variacao_dia >= 0 ? '▲ +' : '▼ ';
+      const retCls = a.retorno_pct >= 0 ? 'p-green' : 'p-red';
+      const retSinal = a.retorno_pct >= 0 ? '+' : '';
+      const classePill = {ACAO:'p-gray', FII:'p-gold', ETF_BR:'p-blue', ETF_EUA:'p-green', TESOURO:'p-blue'}[a.classe] || 'p-gray';
+
+      return `<tr>
+        <td><div class="ticker">${a.ticker}</div><div class="nome-dim">${a.nome || ''}</div></td>
+        <td><span class="pill ${classePill}">${a.classe}</span></td>
+        <td>${fmt(a.quantidade, 0)}</td>
+        <td>${fmtMoeda(a.preco_medio)}</td>
+        <td>${fmtMoeda(a.preco_atual)}</td>
+        <td><span class="pill ${varCls}">${varSinal}${fmt(a.variacao_dia)}%</span></td>
+        <td>${fmtMoeda(a.valor_investido)}</td>
+        <td>${fmtMoeda(a.valor_atual)}</td>
+        <td><span class="pill ${retCls}">${retSinal}${fmt(a.retorno_pct)}%</span></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="9" class="loading">Erro ao carregar carteira.</td></tr>';
+  }
+}
+
+// ── CADASTRO ─────────────────────────────────────────────
+
+async function cadastrarAtivo() {
+  const msg = document.getElementById('msg-cadastro');
+  const ticker = document.getElementById('f-ticker').value.trim();
+  const nome = document.getElementById('f-nome').value.trim();
+  const classe = document.getElementById('f-classe').value;
+  const mercado = document.getElementById('f-mercado').value;
+  const quantidade = parseFloat(document.getElementById('f-quantidade').value);
+  const preco = parseFloat(document.getElementById('f-preco').value);
+
+  if (!ticker || !quantidade || !preco) {
+    msg.innerHTML = '<div class="alert alert-red">Preencha Ticker, Quantidade e Preço Médio.</div>';
+    return;
+  }
+
+  try {
+    const res = await fetch('/ativos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker, nome, classe, mercado, quantidade, preco_medio: preco })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      msg.innerHTML = `<div class="alert alert-green">✓ ${data.mensagem}</div>`;
+      document.getElementById('f-ticker').value = '';
+      document.getElementById('f-nome').value = '';
+      document.getElementById('f-quantidade').value = '';
+      document.getElementById('f-preco').value = '';
+    } else {
+      msg.innerHTML = `<div class="alert alert-red">✗ ${data.detail}</div>`;
+    }
+  } catch(e) {
+    msg.innerHTML = '<div class="alert alert-red">Erro ao cadastrar ativo.</div>';
+  }
+}
+
+// ── PREÇO AO VIVO ─────────────────────────────────────────
+
+async function buscarPreco() {
+  const ticker = document.getElementById('m-ticker').value.trim();
+  const mercado = document.getElementById('m-mercado').value;
+  const el = document.getElementById('resultado-preco');
+
+  if (!ticker) return;
+
+  el.innerHTML = '<div class="loading">Buscando...</div>';
+
+  try {
+    const r = await fetch(`/mercado/preco/${ticker}?mercado=${mercado}`).then(r => r.json());
+    const moeda = mercado === 'EUA' ? 'US$' : 'R$';
+    const varCls = (r.variacao_dia || 0) >= 0 ? 'pos' : 'neg';
+    const varSinal = (r.variacao_dia || 0) >= 0 ? '▲ +' : '▼ ';
+
+    el.innerHTML = `
+      <div style="margin-top:16px;padding:16px;background:#F9F7F4;border-radius:6px;border:1px solid #DDD9D0;">
+        <div style="font-size:13px;color:#888;margin-bottom:4px;">${r.nome || ticker}</div>
+        <div style="font-size:32px;font-weight:700;">${moeda} ${fmt(r.preco)}</div>
+        <div class="card-sub ${varCls}" style="margin-top:4px;">${varSinal}${fmt(r.variacao_dia)}% hoje</div>
+        <div style="font-size:10px;color:#bbb;margin-top:8px;">Fonte: ${r.fonte} · ${new Date().toLocaleTimeString('pt-BR')}</div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = '<div class="alert alert-red">Ticker não encontrado.</div>';
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────
+
+function carregarTudo() { carregarCockpit(); }
+carregarCockpit();
+</script>
+</body>
+</html>
