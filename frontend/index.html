@@ -175,9 +175,52 @@
               <th>Preço Médio</th><th>Preço Atual</th>
               <th>Var. Dia</th><th>Valor Investido</th>
               <th>Valor Atual</th><th>Retorno</th>
+              <th>Ações</th>
             </tr></thead>
-            <tbody id="tabela-carteira"><tr><td colspan="9" class="loading">Carregando...</td></tr></tbody>
+            <tbody id="tabela-carteira"><tr><td colspan="10" class="loading">Carregando...</td></tr></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL COMPRA -->
+    <div id="modal-compra" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:white;border-radius:8px;padding:28px;width:400px;max-width:90vw;">
+        <h3 style="margin-bottom:4px;">📈 Registrar Nova Compra</h3>
+        <p id="modal-compra-ticker" style="color:#888;font-size:12px;margin-bottom:20px;"></p>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label>Quantidade de cotas compradas</label>
+          <input type="number" id="compra-quantidade" placeholder="Ex: 50" step="1" min="1">
+        </div>
+        <div class="form-group" style="margin-bottom:20px;">
+          <label>Preço pago por cota (R$)</label>
+          <input type="number" id="compra-preco" placeholder="Ex: 49.08" step="0.01">
+        </div>
+        <div id="compra-preview" style="background:#F5F3EE;border-radius:6px;padding:12px;margin-bottom:16px;font-size:12px;color:#555;"></div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn-gold" onclick="confirmarCompra()" style="flex:1;">✓ Confirmar Compra</button>
+          <button class="btn-ghost" onclick="fecharModal('modal-compra')" style="flex:1;">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL VENDA -->
+    <div id="modal-venda" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:white;border-radius:8px;padding:28px;width:400px;max-width:90vw;">
+        <h3 style="margin-bottom:4px;">📉 Registrar Venda</h3>
+        <p id="modal-venda-ticker" style="color:#888;font-size:12px;margin-bottom:20px;"></p>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label>Quantidade de cotas vendidas</label>
+          <input type="number" id="venda-quantidade" placeholder="Ex: 30" step="1" min="1">
+        </div>
+        <div class="form-group" style="margin-bottom:20px;">
+          <label>Preço de venda por cota (R$)</label>
+          <input type="number" id="venda-preco" placeholder="Ex: 55.00" step="0.01">
+        </div>
+        <div id="venda-preview" style="background:#F5F3EE;border-radius:6px;padding:12px;margin-bottom:16px;font-size:12px;color:#555;"></div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn-primary" onclick="confirmarVenda()" style="flex:1;">✓ Confirmar Venda</button>
+          <button class="btn-ghost" onclick="fecharModal('modal-venda')" style="flex:1;">Cancelar</button>
         </div>
       </div>
     </div>
@@ -332,6 +375,10 @@
   </div><!-- /main -->
 </div><!-- /layout -->
 
+<script src="/frontend/js/carteira.js"></script>
+<script src="/frontend/js/cockpit.js"></script>
+<script src="/frontend/js/radar.js"></script>
+<script src="/frontend/js/config.js"></script>
 <script>
 function showPanel(id) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -356,8 +403,5 @@ function fmtMoeda(v) {
 
 carregarCockpit();
 </script>
-<script src="/frontend/js/cockpit.js"></script>
-<script src="/frontend/js/radar.js"></script>
-<script src="/frontend/js/config.js"></script>
 </body>
 </html>

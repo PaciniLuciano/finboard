@@ -275,3 +275,74 @@ def salvar_configuracoes(cfg: ConfigInput, db: Session = Depends(get_db)):
                 db.add(Configuracao(chave=chave, valor=json.dumps(valor)))
     db.commit()
     return {"mensagem": "Configuracoes salvas com sucesso"}
+
+# ROTAS OPERACOES
+class NovaCompra(BaseModel):
+    ticker: str
+    quantidade: float
+    preco: float
+
+class Venda(BaseModel):
+    ticker: str
+    quantidade: float
+    preco: float
+
+@app.post("/ativos/compra")
+def registrar_compra(compra: NovaCompra, db: Session = Depends(get_db)):
+    ticker = compra.ticker.upper()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
+
+    if not ativo:
+        raise HTTPException(status_code=404, detail=f"Ativo {ticker} nao encontrado. Cadastre primeiro.")
+
+    # Calcula novo preco medio ponderado
+    custo_atual = ativo.quantidade * ativo.preco_medio
+    custo_novo = compra.quantidade * compra.preco
+    nova_quantidade = ativo.quantidade + compra.quantidade
+    novo_preco_medio = (custo_atual + custo_novo) / nova_quantidade
+
+    ativo.quantidade = nova_quantidade
+    ativo.preco_medio = round(novo_preco_medio, 4)
+    db.commit()
+
+    return {
+        "mensagem": f"Compra registrada — {ticker}",
+        "quantidade_anterior": ativo.quantidade - compra.quantidade,
+        "quantidade_nova": nova_quantidade,
+        "preco_medio_anterior": round((custo_atual) / (ativo.quantidade - compra.quantidade), 2),
+        "preco_medio_novo": round(novo_preco_medio, 2),
+        "custo_total": round(custo_atual + custo_novo, 2)
+    }
+
+@app.post("/ativos/venda")
+def registrar_venda(venda: Venda, db: Session = Depends(get_db)):
+    ticker = venda.ticker.upper()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
+
+    if not ativo:
+        raise HTTPException(status_code=404, detail=f"Ativo {ticker} nao encontrado.")
+
+    if venda.quantidade > ativo.quantidade:
+        raise HTTPException(status_code=400, detail=f"Quantidade insuficiente. Voce tem {ativo.quantidade} cotas.")
+
+    lucro = (venda.preco - ativo.preco_medio) * venda.quantidade
+    nova_quantidade = ativo.quantidade - venda.quantidade
+
+    if nova_quantidade == 0:
+        ativo.ativo = False
+        mensagem = f"{ticker} totalmente vendido e removido da carteira"
+    else:
+        ativo.quantidade = nova_quantidade
+        mensagem = f"Venda registrada — {ticker}"
+
+    db.commit()
+
+    return {
+        "mensagem": mensagem,
+        "quantidade_vendida": venda.quantidade,
+        "quantidade_restante": nova_quantidade,
+        "preco_medio": ativo.preco_medio,
+        "preco_venda": venda.preco,
+        "lucro_realizado": round(lucro, 2),
+        "lucro_pct": round((venda.preco - ativo.preco_medio) / ativo.preco_medio * 100, 2)
+    }
