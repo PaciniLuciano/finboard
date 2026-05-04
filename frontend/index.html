@@ -106,6 +106,7 @@
     <div class="nav-group">
       <div class="nav-label">Mercado</div>
       <button class="nav-item" onclick="showPanel('radar')"><span class="icon">◉</span> Radar</button>
+      <button class="nav-item" onclick="showPanel('rendafixa')"><span class="icon">🏦</span> Renda Fixa</button>
       <button class="nav-item" onclick="showPanel('mercado')"><span class="icon">⊙</span> Preços ao Vivo</button>
     </div>
   </nav>
@@ -303,6 +304,88 @@
       </div>
     </div>
 
+    <!-- RENDA FIXA -->
+    <div id="panel-rendafixa" class="panel">
+      <div class="main-header">
+        <div><h2>Renda Fixa</h2><div class="sub">CDB · LCI · LCA · LC · TESOURO DIRETO</div></div>
+        <button class="btn-primary" onclick="carregarRendaFixa()">↺ Atualizar</button>
+      </div>
+      <div class="main-content">
+        <div id="msg-rf"></div>
+        <div id="resumo-rf"></div>
+
+        <!-- Formulário -->
+        <div class="form-card" style="margin-bottom:20px;">
+          <div class="form-title">+ Cadastrar Título</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Emissor</label>
+              <input type="text" id="rf-emissor" placeholder="Ex: Nubank, Bradesco, Tesouro">
+            </div>
+            <div class="form-group">
+              <label>Tipo</label>
+              <select id="rf-tipo">
+                <option value="CDB">CDB</option>
+                <option value="LCI">LCI</option>
+                <option value="LCA">LCA</option>
+                <option value="LC">LC</option>
+                <option value="TESOURO">Tesouro Direto</option>
+                <option value="DEBENTURE">Debênture</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Indexador</label>
+              <select id="rf-indexador" onchange="atualizarLabelTaxa()">
+                <option value="CDI">CDI</option>
+                <option value="IPCA">IPCA+</option>
+                <option value="PREFIXADO">Prefixado</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label id="rf-taxa-label">Taxa (% do CDI) — Ex: 110 para 110% CDI</label>
+              <input type="number" id="rf-taxa" placeholder="Ex: 110" step="0.1">
+            </div>
+            <div class="form-group">
+              <label>Vencimento</label>
+              <input type="date" id="rf-vencimento">
+            </div>
+            <div class="form-group">
+              <label>Valor Aplicado (R$)</label>
+              <input type="number" id="rf-valor" placeholder="Ex: 10000" step="100">
+            </div>
+            <div class="form-group">
+              <label>Liquidez</label>
+              <select id="rf-liquidez">
+                <option value="DIARIA">Diária</option>
+                <option value="VENCIMENTO">No Vencimento</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn-gold" onclick="cadastrarRF()">+ Cadastrar Título</button>
+        </div>
+
+        <!-- Tabela -->
+        <div class="section-title">Meus Títulos</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Emissor</th>
+              <th>Indexador</th>
+              <th>Taxa Contratada</th>
+              <th>Rentab. Estimada</th>
+              <th>Valor Aplicado</th>
+              <th>Renda Mensal</th>
+              <th>Vencimento</th>
+              <th>Liquidez / FGC</th>
+            </tr></thead>
+            <tbody id="tabela-rf">
+              <tr><td colspan="8" class="loading">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- RADAR -->
     <div id="panel-radar" class="panel">
       <div class="main-header">
@@ -310,6 +393,58 @@
         <button class="btn-gold" onclick="carregarRadar()">↺ Calcular</button>
       </div>
       <div class="main-content">
+
+        <!-- Tabs de fonte -->
+        <div style="display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid #DDD9D0;padding-bottom:12px;">
+          <button id="tab-carteira" onclick="switchRadarFonte(this,'carteira')"
+            style="padding:8px 18px;background:#1A1814;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">
+            📊 Minha Carteira
+          </button>
+          <button id="tab-watchlist" onclick="switchRadarFonte(this,'watchlist')"
+            style="padding:8px 18px;background:transparent;color:#888;border:1px solid #DDD9D0;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">
+            👁 Watchlist
+          </button>
+        </div>
+
+        <!-- Painel Watchlist -->
+        <div id="watchlist-panel" style="display:none;margin-bottom:20px;">
+          <div class="form-card">
+            <div class="form-title">Gerenciar Watchlist</div>
+            <div id="msg-watchlist"></div>
+            <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr auto;margin-bottom:12px;">
+              <div class="form-group">
+                <label>Ticker</label>
+                <input type="text" id="wl-ticker" placeholder="Ex: KNRI11" oninput="this.value=this.value.toUpperCase()">
+              </div>
+              <div class="form-group">
+                <label>Nome (opcional)</label>
+                <input type="text" id="wl-nome" placeholder="Ex: Kinea Renda Imob">
+              </div>
+              <div class="form-group">
+                <label>Classe</label>
+                <select id="wl-classe">
+                  <option value="ACAO">Ação B3</option>
+                  <option value="FII">FII</option>
+                  <option value="ETF_BR">ETF BR</option>
+                  <option value="ETF_EUA">ETF EUA</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Mercado</label>
+                <select id="wl-mercado">
+                  <option value="BR">Brasil</option>
+                  <option value="EUA">EUA</option>
+                </select>
+              </div>
+              <div class="form-group" style="justify-content:flex-end;">
+                <label>&nbsp;</label>
+                <button class="btn-gold" onclick="adicionarWatchlist()">+ Adicionar</button>
+              </div>
+            </div>
+            <div id="watchlist-lista"><div class="loading">Carregando...</div></div>
+          </div>
+        </div>
+
         <div id="radar-content"><div class="loading">Clique em Calcular para analisar seus ativos.</div></div>
       </div>
     </div>
@@ -376,6 +511,7 @@
 </div><!-- /layout -->
 
 <script src="/frontend/js/carteira.js"></script>
+<script src="/frontend/js/rendafixa.js"></script>
 <script src="/frontend/js/cockpit.js"></script>
 <script src="/frontend/js/radar.js"></script>
 <script src="/frontend/js/config.js"></script>
@@ -388,6 +524,7 @@ function showPanel(id) {
   if (id === 'carteira') carregarCarteira();
   if (id === 'cockpit') carregarCockpit();
   if (id === 'radar') carregarRadar();
+  if (id === 'rendafixa') carregarRendaFixa();
   if (id === 'configuracoes') carregarConfig();
 }
 

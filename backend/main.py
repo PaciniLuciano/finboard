@@ -346,3 +346,66 @@ def registrar_venda(venda: Venda, db: Session = Depends(get_db)):
         "lucro_realizado": round(lucro, 2),
         "lucro_pct": round((venda.preco - ativo.preco_medio) / ativo.preco_medio * 100, 2)
     }
+
+# ROTAS WATCHLIST
+from backend.database import Base
+
+class WatchlistItem(Base):
+    from sqlalchemy import Column, Integer, String, Boolean, DateTime
+    from datetime import datetime
+    __tablename__ = "watchlist"
+    __table_args__ = {'extend_existing': True}
+    id = __import__('sqlalchemy').Column(__import__('sqlalchemy').Integer, primary_key=True)
+    ticker = __import__('sqlalchemy').Column(__import__('sqlalchemy').String, unique=True)
+    nome = __import__('sqlalchemy').Column(__import__('sqlalchemy').String)
+    classe = __import__('sqlalchemy').Column(__import__('sqlalchemy').String, default="ACAO")
+    mercado = __import__('sqlalchemy').Column(__import__('sqlalchemy').String, default="BR")
+    ativo = __import__('sqlalchemy').Column(__import__('sqlalchemy').Boolean, default=True)
+
+class WatchlistCreate(BaseModel):
+    ticker: str
+    nome: Optional[str] = None
+    classe: str = "ACAO"
+    mercado: str = "BR"
+
+@app.get("/watchlist")
+def listar_watchlist(db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    result = db.execute(text("SELECT id, ticker, nome, classe, mercado FROM watchlist WHERE ativo=1")).fetchall()
+    return [{"id": r[0], "ticker": r[1], "nome": r[2], "classe": r[3], "mercado": r[4]} for r in result]
+
+@app.post("/watchlist")
+def adicionar_watchlist(item: WatchlistCreate, db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    ticker = item.ticker.upper()
+    existente = db.execute(text(f"SELECT id FROM watchlist WHERE ticker='{ticker}'")).fetchone()
+    if existente:
+        raise HTTPException(status_code=400, detail=f"{ticker} já está na watchlist")
+    db.execute(text(f"INSERT INTO watchlist (ticker, nome, classe, mercado) VALUES ('{ticker}', '{item.nome or ''}', '{item.classe}', '{item.mercado}')"))
+    db.commit()
+    return {"mensagem": f"{ticker} adicionado à watchlist"}
+
+@app.delete("/watchlist/{ticker}")
+def remover_watchlist(ticker: str, db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    db.execute(text(f"UPDATE watchlist SET ativo=0 WHERE ticker='{ticker.upper()}'"))
+    db.commit()
+    return {"mensagem": f"{ticker.upper()} removido da watchlist"}
+
+@app.get("/radar/watchlist")
+def radar_watchlist(db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    result = db.execute(text("SELECT ticker, classe, mercado FROM watchlist WHERE ativo=1")).fetchall()
+    lista = [{"ticker": r[0], "classe": r[1], "mercado": r[2]} for r in result]
+    if not lista:
+        return {"regime": "NEUTRO", "ativos": [], "fonte": "watchlist"}
+    macro = calcular_regime_macro()
+    scores = calcular_scores_carteira(lista)
+    return {
+        "regime": macro["regime"],
+        "selic": macro["detalhes"]["selic_atual"],
+        "ipca": macro["detalhes"]["ipca_12m"],
+        "juro_real": macro["detalhes"]["juro_real"],
+        "ativos": scores,
+        "fonte": "watchlist"
+    }
