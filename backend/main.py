@@ -12,14 +12,12 @@ from backend.data.brapi import buscar_preco, buscar_multiplos, buscar_cambio_usd
 
 app = FastAPI(title="Finboard API", version="1.0.0")
 
-# ── INICIALIZAÇÃO ─────────────────────────────────────────
 
 @app.on_event("startup")
 def startup():
     criar_banco()
     print("✓ Finboard iniciado")
 
-# ── SCHEMAS ───────────────────────────────────────────────
 
 class AtivoCreate(BaseModel):
     ticker: str
@@ -40,7 +38,6 @@ class RendaFixaCreate(BaseModel):
     valor_aplicado: float
     liquidez: str = "VENCIMENTO"
 
-# ── ROTAS — ATIVOS ────────────────────────────────────────
 
 @app.post("/ativos")
 def cadastrar_ativo(ativo: AtivoCreate, db: Session = Depends(get_db)):
@@ -102,7 +99,6 @@ def remover_ativo(ticker: str, db: Session = Depends(get_db)):
     db.commit()
     return {"mensagem": f"Ativo {ticker.upper()} removido"}
 
-# ── ROTAS — RENDA FIXA ────────────────────────────────────
 
 @app.post("/renda-fixa")
 def cadastrar_rf(rf: RendaFixaCreate, db: Session = Depends(get_db)):
@@ -125,7 +121,6 @@ def listar_rf(db: Session = Depends(get_db)):
     itens = db.query(RendaFixa).filter(RendaFixa.ativo == True).all()
     return itens
 
-# ── ROTAS — MERCADO ───────────────────────────────────────
 
 @app.get("/mercado/preco/{ticker}")
 def preco_ativo(ticker: str, mercado: str = "BR"):
@@ -139,7 +134,6 @@ def ibovespa():
 def cambio():
     return {"usd_brl": buscar_cambio_usd_brl()}
 
-# ── ROTAS — CARTEIRA ──────────────────────────────────────
 
 @app.get("/carteira/resumo")
 def resumo_carteira(db: Session = Depends(get_db)):
@@ -188,9 +182,55 @@ def resumo_carteira(db: Session = Depends(get_db)):
         "cambio_usd_brl": cambio
     }
 
-# ── FRONTEND ──────────────────────────────────────────────
+app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+
 
 @app.get("/")
 def home():
     return FileResponse("frontend/index.html")
 
+
+
+from backend.scoring.engine import calcular_score_final, calcular_scores_carteira
+from backend.scoring.macro import calcular_regime_macro
+
+@app.get("/scoring/{ticker}")
+def score_ativo(ticker: str, classe: str = "ACAO", mercado: str = "BR"):
+    """Calcula score triplo para um ativo."""
+    return calcular_score_final(ticker, classe, mercado)
+
+@app.get("/scoring/carteira/todos")
+def score_carteira(db: Session = Depends(get_db)):
+    """Calcula score de todos os ativos da carteira."""
+    ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
+    lista = [{"ticker": a.ticker, "classe": a.classe, "mercado": a.mercado} for a in ativos]
+    if not lista:
+        return []
+    return calcular_scores_carteira(lista)
+
+@app.get("/macro/regime")
+def regime_macro():
+    """Retorna regime macro atual."""
+    return calcular_regime_macro()
+
+@app.get("/radar")
+def radar(db: Session = Depends(get_db)):
+    """
+    Radar de oportunidades — analisa ativos da carteira
+    e retorna ordenados por score final.
+    """
+    ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
+    lista = [{"ticker": a.ticker, "classe": a.classe, "mercado": a.mercado} for a in ativos]
+    if not lista:
+        return {"regime": "NEUTRO", "ativos": []}
+    
+    macro = calcular_regime_macro()
+    scores = calcular_scores_carteira(lista)
+    
+    return {
+        "regime": macro["regime"],
+        "selic": macro["detalhes"]["selic_atual"],
+        "ipca": macro["detalhes"]["ipca_12m"],
+        "juro_real": macro["detalhes"]["juro_real"],
+        "ativos": scores
+    }

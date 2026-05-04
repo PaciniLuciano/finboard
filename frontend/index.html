@@ -101,7 +101,8 @@
     </div>
     <div class="nav-group">
       <div class="nav-label">Mercado</div>
-      <button class="nav-item" onclick="showPanel('mercado')"><span class="icon">◉</span> Preços ao Vivo</button>
+      <button class="nav-item" onclick="showPanel('radar')"><span class="icon">◉</span> Radar</button>
+      <button class="nav-item" onclick="showPanel('mercado')"><span class="icon">⊙</span> Preços ao Vivo</button>
     </div>
   </nav>
 
@@ -234,6 +235,17 @@
       </div>
     </div>
 
+    <!-- RADAR -->
+    <div id="panel-radar" class="panel">
+      <div class="main-header">
+        <div><h2>Radar de Oportunidades</h2><div class="sub">Score triplo: Valuation + Momento + Macro</div></div>
+        <button class="btn-gold" onclick="carregarRadar()">↺ Calcular</button>
+      </div>
+      <div class="main-content">
+        <div id="radar-content"><div class="loading">Clique em Calcular para analisar seus ativos.</div></div>
+      </div>
+    </div>
+
   </div><!-- /main -->
 </div><!-- /layout -->
 
@@ -247,6 +259,7 @@ function showPanel(id) {
   event.currentTarget.classList.add('active');
   if (id === 'carteira') carregarCarteira();
   if (id === 'cockpit') carregarCockpit();
+  if (id === 'radar') carregarRadar();
 }
 
 function fmt(v, decimais = 2) {
@@ -429,5 +442,6 @@ async function buscarPreco() {
 function carregarTudo() { carregarCockpit(); }
 carregarCockpit();
 </script>
+<script src="/frontend/js/radar.js"></script>
 </body>
 </html>
