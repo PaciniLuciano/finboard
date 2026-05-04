@@ -43,6 +43,18 @@ class RendaFixaCreate(BaseModel):
 def cadastrar_ativo(ativo: AtivoCreate, db: Session = Depends(get_db)):
     existente = db.query(Ativo).filter(Ativo.ticker == ativo.ticker.upper()).first()
     if existente:
+        if existente.ativo == False:
+            # Reativa e atualiza
+            existente.ativo = True
+            existente.nome = ativo.nome
+            existente.classe = ativo.classe
+            existente.mercado = ativo.mercado
+            existente.quantidade = ativo.quantidade
+            existente.preco_medio = ativo.preco_medio
+            existente.moeda = ativo.moeda
+            existente.data_compra = ativo.data_compra
+            db.commit()
+            return {"mensagem": f"Ativo {ativo.ticker.upper()} reativado com sucesso", "id": existente.id}
         raise HTTPException(status_code=400, detail=f"Ticker {ativo.ticker} já cadastrado")
 
     novo = Ativo(

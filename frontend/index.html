@@ -228,7 +228,7 @@
     </div>
 
     <!-- CADASTRO -->
-    <div id="panel-cadastro" class="panel">
+        <div id="panel-cadastro" class="panel">
       <div class="main-header">
         <div><h2>Cadastrar Ativo</h2><div class="sub">Adicione ativos à sua carteira</div></div>
       </div>
@@ -239,7 +239,7 @@
           <div class="form-grid">
             <div class="form-group">
               <label>Ticker</label>
-              <input type="text" id="f-ticker" placeholder="Ex: PETR4" oninput="this.value = this.value.toUpperCase()">
+              <input type="text" id="f-ticker" placeholder="Ex: PETR4" oninput="this.value=this.value.toUpperCase()">
             </div>
             <div class="form-group">
               <label>Nome (opcional)</label>
@@ -270,13 +270,17 @@
               <label>Preço Médio (R$)</label>
               <input type="number" id="f-preco" placeholder="Ex: 38.50" step="0.01">
             </div>
+            <div class="form-group">
+              <label>Data de Compra (opcional)</label>
+              <input type="date" id="f-data">
+            </div>
           </div>
           <button class="btn-gold" onclick="cadastrarAtivo()">+ Cadastrar Ativo</button>
         </div>
       </div>
     </div>
 
-    <!-- MERCADO -->
+        <!-- MERCADO -->
     <div id="panel-mercado" class="panel">
       <div class="main-header">
         <div><h2>Preços ao Vivo</h2><div class="sub">Consulte qualquer ativo em tempo real</div></div>
@@ -595,6 +599,7 @@
   </div><!-- /main -->
 </div><!-- /layout -->
 
+<script src="/frontend/js/cadastro.js"></script>
 <script src="/frontend/js/carteira.js"></script>
 <script src="/frontend/js/dividendos.js"></script>
 <script src="/frontend/js/rendafixa.js"></script>
