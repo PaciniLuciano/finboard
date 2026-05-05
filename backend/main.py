@@ -8,7 +8,8 @@ from datetime import date
 import os
 
 from backend.database import get_db, criar_banco, Ativo, RendaFixa, PrecoCache
-from backend.data.brapi import buscar_preco, buscar_multiplos, buscar_cambio_usd_brl, buscar_ibovespa
+from backend.data.brapi import buscar_multiplos, buscar_cambio_usd_brl, buscar_ibovespa
+from backend.data.cache import buscar_preco_com_cache as buscar_preco
 
 app = FastAPI(title="Finboard API", version="1.0.0")
 
