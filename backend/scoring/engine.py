@@ -16,13 +16,16 @@ def calcular_score_final(ticker: str, classe: str = "ACAO", mercado: str = "BR",
 
     print(f"  Calculando scores para {ticker}...")
 
+    if macro_info is None:
+        macro_info = calcular_regime_macro()
+
     with ThreadPoolExecutor(max_workers=2) as ex:
         fut_val = ex.submit(calcular_valuation, ticker, classe, mercado)
         fut_mom = ex.submit(calcular_momento, ticker, mercado)
         s_valuation = fut_val.result()
         s_momento   = fut_mom.result()
 
-    s_macro = get_score_macro(classe)
+    s_macro = get_score_macro(classe, macro_info)
 
     v   = s_valuation.get("score_valuation") or 5.0
     m   = s_momento.get("score_momento") or 5.0
@@ -34,9 +37,6 @@ def calcular_score_final(ticker: str, classe: str = "ACAO", mercado: str = "BR",
         mac * pesos["macro"],
         1
     )
-
-    if macro_info is None:
-        macro_info = calcular_regime_macro()
 
     return {
         "ticker": ticker,

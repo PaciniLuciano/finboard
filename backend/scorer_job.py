@@ -1,6 +1,6 @@
 import threading, time, json
 from datetime import datetime
-from backend.database import get_db, Ativo
+from backend.database import get_db, Ativo, Watchlist
 from backend.models_extra import ScoreCache
 from backend.scoring.engine import calcular_scores_carteira
 from sqlalchemy import text
@@ -21,8 +21,8 @@ def atualizar_scores():
         lista = [{"ticker": a.ticker, "classe": a.classe, "mercado": a.mercado} for a in ativos]
         
         # Watchlist
-        wl = db.execute(text("SELECT ticker, classe, mercado FROM watchlist WHERE ativo=1")).fetchall()
-        lista_wl = [{"ticker": r[0], "classe": r[1], "mercado": r[2]} for r in wl]
+        wl = db.query(Watchlist).filter(Watchlist.ativo == True).all()
+        lista_wl = [{"ticker": r.ticker, "classe": r.classe, "mercado": r.mercado} for r in wl]
 
         for origem, lista_ativos in [("carteira", lista), ("watchlist", lista_wl)]:
             if not lista_ativos:

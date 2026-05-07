@@ -7,7 +7,7 @@ from typing import Optional
 from datetime import date
 import os
 
-from backend.database import get_db, criar_banco, Ativo, RendaFixa, PrecoCache
+from backend.database import get_db, criar_banco, Ativo, RendaFixa, PrecoCache, Watchlist, Dividendo
 from backend.data.brapi import buscar_multiplos, buscar_cambio_usd_brl, buscar_ibovespa
 from backend.data.cache import buscar_preco_com_cache as buscar_preco
 
@@ -15,15 +15,11 @@ app = FastAPI(title="Finboard API", version="1.0.0")
 
 from backend.scorer_job import iniciar_job
 from backend.models_extra import ScoreCache
+
 @app.on_event("startup")
 def startup():
     criar_banco()
     iniciar_job()
-
-
-@app.on_event("startup")
-def startup():
-    criar_banco()
     print("✓ Finboard iniciado")
 
 
@@ -379,19 +375,6 @@ def registrar_venda(venda: Venda, db: Session = Depends(get_db)):
     }
 
 # ROTAS WATCHLIST
-from backend.database import Base
-
-class WatchlistItem(Base):
-    from sqlalchemy import Column, Integer, String, Boolean, DateTime
-    from datetime import datetime
-    __tablename__ = "watchlist"
-    __table_args__ = {'extend_existing': True}
-    id = __import__('sqlalchemy').Column(__import__('sqlalchemy').Integer, primary_key=True)
-    ticker = __import__('sqlalchemy').Column(__import__('sqlalchemy').String, unique=True)
-    nome = __import__('sqlalchemy').Column(__import__('sqlalchemy').String)
-    classe = __import__('sqlalchemy').Column(__import__('sqlalchemy').String, default="ACAO")
-    mercado = __import__('sqlalchemy').Column(__import__('sqlalchemy').String, default="BR")
-    ativo = __import__('sqlalchemy').Column(__import__('sqlalchemy').Boolean, default=True)
 
 class WatchlistCreate(BaseModel):
     ticker: str
@@ -401,37 +384,38 @@ class WatchlistCreate(BaseModel):
 
 @app.get("/watchlist")
 def listar_watchlist(db: Session = Depends(get_db)):
-    from sqlalchemy import text
-    result = db.execute(text("SELECT id, ticker, nome, classe, mercado FROM watchlist WHERE ativo=1")).fetchall()
-    return [{"id": r[0], "ticker": r[1], "nome": r[2], "classe": r[3], "mercado": r[4]} for r in result]
+    items = db.query(Watchlist).filter(Watchlist.ativo == True).all()
+    return [{"id": i.id, "ticker": i.ticker, "nome": i.nome, "classe": i.classe, "mercado": i.mercado} for i in items]
 
 @app.post("/watchlist")
 def adicionar_watchlist(item: WatchlistCreate, db: Session = Depends(get_db)):
-    from sqlalchemy import text
     ticker = item.ticker.upper()
-    existente = db.execute(text(f"SELECT id, ativo FROM watchlist WHERE ticker='{ticker}'")).fetchone()
+    existente = db.query(Watchlist).filter(Watchlist.ticker == ticker).first()
     if existente:
-        if existente[1] == 1:
+        if existente.ativo:
             raise HTTPException(status_code=400, detail=f"{ticker} ja esta na watchlist")
-        else:
-            db.execute(text(f"UPDATE watchlist SET ativo=1, nome='{item.nome or ""}', classe='{item.classe}', mercado='{item.mercado}' WHERE ticker='{ticker}'"))
-            db.commit()
-            return {"mensagem": f"{ticker} reativado na watchlist"}
-    db.execute(text(f"INSERT INTO watchlist (ticker, nome, classe, mercado) VALUES ('{ticker}', '{item.nome or ""}', '{item.classe}', '{item.mercado}')"))
+        existente.ativo = True
+        existente.nome = item.nome
+        existente.classe = item.classe
+        existente.mercado = item.mercado
+        db.commit()
+        return {"mensagem": f"{ticker} reativado na watchlist"}
+    db.add(Watchlist(ticker=ticker, nome=item.nome, classe=item.classe, mercado=item.mercado))
     db.commit()
     return {"mensagem": f"{ticker} adicionado a watchlist"}
+
 @app.delete("/watchlist/{ticker}")
 def remover_watchlist(ticker: str, db: Session = Depends(get_db)):
-    from sqlalchemy import text
-    db.execute(text(f"UPDATE watchlist SET ativo=0 WHERE ticker='{ticker.upper()}'"))
-    db.commit()
+    item = db.query(Watchlist).filter(Watchlist.ticker == ticker.upper()).first()
+    if item:
+        item.ativo = False
+        db.commit()
     return {"mensagem": f"{ticker.upper()} removido da watchlist"}
 
 @app.get("/radar/watchlist")
 def radar_watchlist(db: Session = Depends(get_db)):
-    from sqlalchemy import text
-    result = db.execute(text("SELECT ticker, classe, mercado FROM watchlist WHERE ativo=1")).fetchall()
-    lista = [{"ticker": r[0], "classe": r[1], "mercado": r[2]} for r in result]
+    items = db.query(Watchlist).filter(Watchlist.ativo == True).all()
+    lista = [{"ticker": i.ticker, "classe": i.classe, "mercado": i.mercado} for i in items]
     if not lista:
         return {"regime": "NEUTRO", "ativos": [], "fonte": "watchlist"}
     macro = calcular_regime_macro()
@@ -455,35 +439,32 @@ class DividendoCreate(BaseModel):
 
 @app.post("/dividendos")
 def registrar_dividendo(div: DividendoCreate, db: Session = Depends(get_db)):
-    from sqlalchemy import text
     ticker = div.ticker.upper()
     valor_total = div.valor_por_cota * div.quantidade_cotas
-    db.execute(text(f"""
-        INSERT INTO dividendos (ticker, valor_por_cota, quantidade_cotas, valor_total, data_pagamento, tipo)
-        VALUES ('{ticker}', {div.valor_por_cota}, {div.quantidade_cotas}, {valor_total}, '{div.data_pagamento}', '{div.tipo}')
-    """))
+    db.add(Dividendo(
+        ticker=ticker,
+        valor_por_cota=div.valor_por_cota,
+        quantidade_cotas=div.quantidade_cotas,
+        valor_total=valor_total,
+        data_pagamento=div.data_pagamento,
+        tipo=div.tipo
+    ))
     db.commit()
     return {"mensagem": f"Dividendo de {ticker} registrado", "valor_total": round(valor_total, 2)}
 
 @app.get("/dividendos/{ticker}")
 def listar_dividendos(ticker: str, db: Session = Depends(get_db)):
-    from sqlalchemy import text
-    result = db.execute(text(f"""
-        SELECT id, ticker, valor_por_cota, quantidade_cotas, valor_total, data_pagamento, tipo
-        FROM dividendos WHERE ticker='{ticker.upper()}' ORDER BY data_pagamento DESC
-    """)).fetchall()
-    return [{"id": r[0], "ticker": r[1], "valor_por_cota": r[2], "quantidade_cotas": r[3],
-             "valor_total": r[4], "data_pagamento": r[5], "tipo": r[6]} for r in result]
+    from sqlalchemy import desc
+    items = db.query(Dividendo).filter(Dividendo.ticker == ticker.upper()).order_by(desc(Dividendo.data_pagamento)).all()
+    return [{"id": i.id, "ticker": i.ticker, "valor_por_cota": i.valor_por_cota, "quantidade_cotas": i.quantidade_cotas,
+             "valor_total": i.valor_total, "data_pagamento": str(i.data_pagamento), "tipo": i.tipo} for i in items]
 
 @app.get("/dividendos")
 def listar_todos_dividendos(db: Session = Depends(get_db)):
-    from sqlalchemy import text
-    result = db.execute(text("""
-        SELECT id, ticker, valor_por_cota, quantidade_cotas, valor_total, data_pagamento, tipo
-        FROM dividendos ORDER BY data_pagamento DESC
-    """)).fetchall()
-    return [{"id": r[0], "ticker": r[1], "valor_por_cota": r[2], "quantidade_cotas": r[3],
-             "valor_total": r[4], "data_pagamento": r[5], "tipo": r[6]} for r in result]
+    from sqlalchemy import desc
+    items = db.query(Dividendo).order_by(desc(Dividendo.data_pagamento)).all()
+    return [{"id": i.id, "ticker": i.ticker, "valor_por_cota": i.valor_por_cota, "quantidade_cotas": i.quantidade_cotas,
+             "valor_total": i.valor_total, "data_pagamento": str(i.data_pagamento), "tipo": i.tipo} for i in items]
 
 @app.get("/retorno-total/{ticker}")
 def retorno_total(ticker: str, db: Session = Depends(get_db)):
@@ -497,11 +478,8 @@ def retorno_total(ticker: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Ativo não encontrado")
 
     # Busca dividendos
-    result = db.execute(text(f"""
-        SELECT SUM(valor_total), COUNT(*)
-        FROM dividendos WHERE ticker='{ticker}'
-    """)).fetchone()
-
+    from sqlalchemy import func
+    result = db.query(func.sum(Dividendo.valor_total), func.count(Dividendo.id)).filter(Dividendo.ticker == ticker).one()
     total_dividendos = result[0] or 0
     qtd_proventos = result[1] or 0
 
@@ -541,7 +519,7 @@ def retorno_total(ticker: str, db: Session = Depends(get_db)):
 def importar_dividendos(ticker: str, db: Session = Depends(get_db)):
     """Importa automaticamente dividendos via yfinance desde a data de compra."""
     import yfinance as yf
-    from sqlalchemy import text
+    from datetime import date as date_type
 
     ticker = ticker.upper()
     ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
@@ -556,36 +534,37 @@ def importar_dividendos(ticker: str, db: Session = Depends(get_db)):
         if divs.empty:
             return {"mensagem": "Nenhum dividendo encontrado", "importados": 0}
 
-        # Filtra desde a data de compra
         if ativo.data_compra:
-            data_compra = str(ativo.data_compra)
-            divs = divs[divs.index >= data_compra]
+            divs = divs[divs.index >= str(ativo.data_compra)]
 
         importados = 0
         ignorados = 0
 
         for data, valor in divs.items():
             data_str = str(data)[:10]  # YYYY-MM-DD
+            data_obj = date_type.fromisoformat(data_str)
 
-            # Verifica se já existe
-            existente = db.execute(text(f"""
-                SELECT id FROM dividendos
-                WHERE ticker='{ticker}' AND data_pagamento='{data_str}'
-            """)).fetchone()
+            existente = db.query(Dividendo).filter(
+                Dividendo.ticker == ticker,
+                Dividendo.data_pagamento == data_obj
+            ).first()
 
             if existente:
                 ignorados += 1
                 continue
 
             valor_total = float(valor) * ativo.quantidade
-            db.execute(text(f"""
-                INSERT INTO dividendos (ticker, valor_por_cota, quantidade_cotas, valor_total, data_pagamento, tipo)
-                VALUES ('{ticker}', {float(valor)}, {ativo.quantidade}, {valor_total}, '{data_str}', 'AUTO')
-            """))
+            db.add(Dividendo(
+                ticker=ticker,
+                valor_por_cota=float(valor),
+                quantidade_cotas=ativo.quantidade,
+                valor_total=valor_total,
+                data_pagamento=data_obj,
+                tipo="AUTO"
+            ))
             importados += 1
 
         db.commit()
-
         return {
             "mensagem": f"{ticker} — {importados} proventos importados",
             "importados": importados,
@@ -599,33 +578,37 @@ def importar_dividendos(ticker: str, db: Session = Depends(get_db)):
 @app.post("/dividendos/importar-todos")
 def importar_todos_dividendos(db: Session = Depends(get_db)):
     """Importa dividendos de todos os ativos da carteira."""
+    import yfinance as yf
+    from datetime import date as date_type
+
     ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
     resultados = []
     for ativo in ativos:
         try:
-            from sqlalchemy import text
-            import yfinance as yf
             ticker_yf = f"{ativo.ticker}.SA" if ativo.mercado == "BR" else ativo.ticker
-            yf_ativo = yf.Ticker(ticker_yf)
-            divs = yf_ativo.dividends
+            divs = yf.Ticker(ticker_yf).dividends
             if divs.empty:
                 continue
             if ativo.data_compra:
                 divs = divs[divs.index >= str(ativo.data_compra)]
             importados = 0
             for data, valor in divs.items():
-                data_str = str(data)[:10]
-                existente = db.execute(text(f"""
-                    SELECT id FROM dividendos
-                    WHERE ticker='{ativo.ticker}' AND data_pagamento='{data_str}'
-                """)).fetchone()
+                data_obj = date_type.fromisoformat(str(data)[:10])
+                existente = db.query(Dividendo).filter(
+                    Dividendo.ticker == ativo.ticker,
+                    Dividendo.data_pagamento == data_obj
+                ).first()
                 if existente:
                     continue
                 valor_total = float(valor) * ativo.quantidade
-                db.execute(text(f"""
-                    INSERT INTO dividendos (ticker, valor_por_cota, quantidade_cotas, valor_total, data_pagamento, tipo)
-                    VALUES ('{ativo.ticker}', {float(valor)}, {ativo.quantidade}, {valor_total}, '{data_str}', 'AUTO')
-                """))
+                db.add(Dividendo(
+                    ticker=ativo.ticker,
+                    valor_por_cota=float(valor),
+                    quantidade_cotas=ativo.quantidade,
+                    valor_total=valor_total,
+                    data_pagamento=data_obj,
+                    tipo="AUTO"
+                ))
                 importados += 1
             db.commit()
             if importados > 0:

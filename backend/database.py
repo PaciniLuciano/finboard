@@ -86,6 +86,26 @@ class HistoricoAgente(Base):
     resposta = Column(Text)
     criado_em = Column(DateTime, default=datetime.now)
 
+class Watchlist(Base):
+    __tablename__ = "watchlist"
+    __table_args__ = {'extend_existing': True}
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, unique=True, index=True)
+    nome = Column(String)
+    classe = Column(String, default="ACAO")
+    mercado = Column(String, default="BR")
+    ativo = Column(Boolean, default=True)
+
+class Dividendo(Base):
+    __tablename__ = "dividendos"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, index=True)
+    valor_por_cota = Column(Float)
+    quantidade_cotas = Column(Float)
+    valor_total = Column(Float)
+    data_pagamento = Column(Date)
+    tipo = Column(String, default="PROVENTO")
+
 # ── CRIAR TABELAS ────────────────────────────────────────
 
 def criar_banco():

@@ -37,22 +37,31 @@ def preco_em_cache(ticker: str) -> dict | None:
         return None
 
 def salvar_cache(ticker: str, dados: dict):
-    """Salva preço no cache."""
+    """Salva preço no cache — UPSERT por ticker."""
     try:
         conn = get_conn()
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO precos_cache (ticker, preco, variacao_dia, volume, moeda, fonte, atualizado_em)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            ticker,
+        now = datetime.now().isoformat()
+        values = (
             dados.get("preco"),
             dados.get("variacao_dia"),
             dados.get("volume"),
             dados.get("moeda", "BRL"),
             dados.get("fonte", "api"),
-            datetime.now().isoformat()
-        ))
+            now,
+        )
+        row = cursor.execute("SELECT id FROM precos_cache WHERE ticker=?", (ticker,)).fetchone()
+        if row:
+            cursor.execute("""
+                UPDATE precos_cache
+                SET preco=?, variacao_dia=?, volume=?, moeda=?, fonte=?, atualizado_em=?
+                WHERE ticker=?
+            """, (*values, ticker))
+        else:
+            cursor.execute("""
+                INSERT INTO precos_cache (ticker, preco, variacao_dia, volume, moeda, fonte, atualizado_em)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (ticker, *values))
         conn.commit()
         conn.close()
     except:

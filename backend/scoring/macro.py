@@ -118,9 +118,10 @@ def calcular_regime_macro() -> dict:
         "calculado_em": datetime.now().isoformat()
     }
 
-def get_score_macro(classe: str) -> float:
-    macro = calcular_regime_macro()
-    scores = macro.get("scores_por_classe", {})
+def get_score_macro(classe: str, macro_info: dict = None) -> float:
+    if macro_info is None:
+        macro_info = calcular_regime_macro()
+    scores = macro_info.get("scores_por_classe", {})
     mapa = {
         "ACAO": "ACAO", "FII": "FII_TIJOLO",
         "ETF_BR": "ETF_BR", "ETF_EUA": "ETF_EUA",
