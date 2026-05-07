@@ -1,7 +1,22 @@
 import requests
+import time
 from datetime import datetime
 
 BACEN_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs"
+
+# Cache in-memory para dados macro — TTL 6h (Selic/IPCA mudam mensalmente, Focus semanalmente)
+_MACRO_TTL = 6 * 3600
+_macro_cache: dict = {"resultado": None, "ts": 0.0}
+
+def invalidar_cache_macro() -> None:
+    _macro_cache["resultado"] = None
+    _macro_cache["ts"] = 0.0
+
+def _cache_macro_valido() -> bool:
+    return (
+        _macro_cache["resultado"] is not None
+        and (time.monotonic() - _macro_cache["ts"]) < _MACRO_TTL
+    )
 
 def buscar_selic() -> float:
     """Busca taxa Selic meta atual (% ao ano)."""
@@ -44,7 +59,10 @@ def buscar_focus_selic() -> float | None:
     except:
         return None
 
-def calcular_regime_macro() -> dict:
+def calcular_regime_macro(forcar: bool = False) -> dict:
+    if not forcar and _cache_macro_valido():
+        return {**_macro_cache["resultado"], "cache": True}
+
     selic = buscar_selic()
     ipca = buscar_ipca_12m()
     selic_esperada = buscar_focus_selic()
@@ -110,13 +128,17 @@ def calcular_regime_macro() -> dict:
             "TESOURO_IPCA": 6.0, "TESOURO_SELIC": 4.5, "CDB": 5.0,
         }
 
-    return {
+    resultado = {
         "regime": regime,
         "pontos_regime": pontos_regime,
         "detalhes": detalhes,
         "scores_por_classe": scores,
-        "calculado_em": datetime.now().isoformat()
+        "calculado_em": datetime.now().isoformat(),
+        "cache": False
     }
+    _macro_cache["resultado"] = resultado
+    _macro_cache["ts"] = time.monotonic()
+    return resultado
 
 def get_score_macro(classe: str, macro_info: dict = None) -> float:
     if macro_info is None:

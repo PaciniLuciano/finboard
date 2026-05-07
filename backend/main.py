@@ -208,7 +208,7 @@ def home():
 
 
 from backend.scoring.engine import calcular_score_final, calcular_scores_carteira
-from backend.scoring.macro import calcular_regime_macro
+from backend.scoring.macro import calcular_regime_macro, invalidar_cache_macro
 
 @app.get("/scoring/{ticker}")
 def score_ativo(ticker: str, classe: str = "ACAO", mercado: str = "BR"):
@@ -225,9 +225,15 @@ def score_carteira(db: Session = Depends(get_db)):
     return calcular_scores_carteira(lista)
 
 @app.get("/macro/regime")
-def regime_macro():
-    """Retorna regime macro atual."""
-    return calcular_regime_macro()
+def regime_macro(forcar: bool = False):
+    """Retorna regime macro atual. Cache de 6h; use ?forcar=true para atualizar."""
+    return calcular_regime_macro(forcar=forcar)
+
+@app.post("/macro/invalidar-cache")
+def invalidar_macro():
+    """Força atualização do cache macro na próxima chamada."""
+    invalidar_cache_macro()
+    return {"mensagem": "Cache macro invalidado"}
 
 @app.get("/radar")
 def radar(origem: str = "carteira", forcar: bool = False, db: Session = Depends(get_db)):
