@@ -198,6 +198,16 @@ def resumo_carteira(db: Session = Depends(get_db)):
         "cambio_usd_brl": cambio
     }
 
+@app.get("/history/{ticker}")
+def historico_ativo(ticker: str, mercado: str = "BR", periodo: str = "1y"):
+    from backend.data.history import buscar_historico
+    try:
+        return buscar_historico(ticker, mercado, periodo)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
 
