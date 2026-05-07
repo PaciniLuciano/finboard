@@ -173,6 +173,25 @@
       </div>
       <div class="main-content">
         <div id="msg-carteira"></div>
+
+        <!-- Exportar / Importar carteira -->
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+          <span style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.08em;">Backup:</span>
+          <button onclick="exportarCarteira('csv')"
+            style="padding:5px 12px;font-size:11px;background:white;border:1px solid #DDD9D0;border-radius:5px;cursor:pointer;color:#555;">
+            ↓ CSV
+          </button>
+          <button onclick="exportarCarteira('xlsx')"
+            style="padding:5px 12px;font-size:11px;background:white;border:1px solid #DDD9D0;border-radius:5px;cursor:pointer;color:#555;">
+            ↓ Excel
+          </button>
+          <label
+            style="padding:5px 12px;font-size:11px;background:#C8860A;color:white;border-radius:5px;cursor:pointer;">
+            ↑ Importar CSV / Excel
+            <input type="file" accept=".csv,.xlsx,.xls" onchange="importarCarteira(this)" style="display:none;">
+          </label>
+        </div>
+
         <div class="table-wrap">
           <table>
             <thead><tr>
@@ -592,6 +611,24 @@
               </div>
             </div>
             <div id="watchlist-lista"><div class="loading">Carregando...</div></div>
+
+            <!-- Exportar / Importar watchlist -->
+            <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #F0EDE6;flex-wrap:wrap;align-items:center;">
+              <span style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.08em;">Backup:</span>
+              <button onclick="exportarWatchlist('csv')"
+                style="padding:5px 12px;font-size:11px;background:white;border:1px solid #DDD9D0;border-radius:5px;cursor:pointer;color:#555;">
+                ↓ CSV
+              </button>
+              <button onclick="exportarWatchlist('xlsx')"
+                style="padding:5px 12px;font-size:11px;background:white;border:1px solid #DDD9D0;border-radius:5px;cursor:pointer;color:#555;">
+                ↓ Excel
+              </button>
+              <label
+                style="padding:5px 12px;font-size:11px;background:#C8860A;color:white;border-radius:5px;cursor:pointer;">
+                ↑ Importar CSV / Excel
+                <input type="file" accept=".csv,.xlsx,.xls" onchange="importarWatchlist(this)" style="display:none;">
+              </label>
+            </div>
           </div>
         </div>
 
@@ -667,6 +704,7 @@
 <script src="/frontend/js/cockpit.js"></script>
 <script src="/frontend/js/radar.js"></script>
 <script src="/frontend/js/grafico.js"></script>
+<script src="/frontend/js/exportar.js"></script>
 <script src="/frontend/js/config.js"></script>
 <script>
 function showPanel(id) {

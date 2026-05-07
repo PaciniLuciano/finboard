@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+yfinance
+requests
+python-dotenv
+pandas
+openpyxl
+python-multipart
