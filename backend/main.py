@@ -13,6 +13,13 @@ from backend.data.cache import buscar_preco_com_cache as buscar_preco
 
 app = FastAPI(title="Finboard API", version="1.0.0")
 
+from backend.scorer_job import iniciar_job
+from backend.models_extra import ScoreCache
+@app.on_event("startup")
+def startup():
+    criar_banco()
+    iniciar_job()
+
 
 @app.on_event("startup")
 def startup():
@@ -227,25 +234,36 @@ def regime_macro():
     return calcular_regime_macro()
 
 @app.get("/radar")
-def radar(db: Session = Depends(get_db)):
-    """
-    Radar de oportunidades — analisa ativos da carteira
-    e retorna ordenados por score final.
-    """
-    ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
-    lista = [{"ticker": a.ticker, "classe": a.classe, "mercado": a.mercado} for a in ativos]
-    if not lista:
-        return {"regime": "NEUTRO", "ativos": []}
-    
+def radar(origem: str = "carteira", forcar: bool = False, db: Session = Depends(get_db)):
+    from backend.scorer_job import atualizar_scores
+    from backend.scoring.macro import calcular_regime_macro
+
+    # Se forcar=true ou cache vazio, recalcula agora
+    cache = db.query(ScoreCache).filter(ScoreCache.origem == origem).all()
+    if forcar or not cache:
+        atualizar_scores()
+        cache = db.query(ScoreCache).filter(ScoreCache.origem == origem).all()
+
     macro = calcular_regime_macro()
-    scores = calcular_scores_carteira(lista)
-    
+    ativos = [{
+        "ticker": s.ticker,
+        "classe": s.classe,
+        "mercado": s.mercado,
+        "score_final": s.score_final,
+        "score_valuation": s.score_valuation,
+        "score_momento": s.score_momento,
+        "score_macro": s.score_macro,
+        "regime_macro": s.regime_macro,
+        "sinal": s.sinal,
+        "calculado_em": s.calculado_em.isoformat() if s.calculado_em else None
+    } for s in sorted(cache, key=lambda x: x.score_final, reverse=True)]
+
     return {
         "regime": macro["regime"],
         "selic": macro["detalhes"]["selic_atual"],
         "ipca": macro["detalhes"]["ipca_12m"],
         "juro_real": macro["detalhes"]["juro_real"],
-        "ativos": scores
+        "ativos": ativos
     }
 
 # ROTAS CONFIGURACOES
@@ -391,13 +409,17 @@ def listar_watchlist(db: Session = Depends(get_db)):
 def adicionar_watchlist(item: WatchlistCreate, db: Session = Depends(get_db)):
     from sqlalchemy import text
     ticker = item.ticker.upper()
-    existente = db.execute(text(f"SELECT id FROM watchlist WHERE ticker='{ticker}'")).fetchone()
+    existente = db.execute(text(f"SELECT id, ativo FROM watchlist WHERE ticker='{ticker}'")).fetchone()
     if existente:
-        raise HTTPException(status_code=400, detail=f"{ticker} já está na watchlist")
-    db.execute(text(f"INSERT INTO watchlist (ticker, nome, classe, mercado) VALUES ('{ticker}', '{item.nome or ''}', '{item.classe}', '{item.mercado}')"))
+        if existente[1] == 1:
+            raise HTTPException(status_code=400, detail=f"{ticker} ja esta na watchlist")
+        else:
+            db.execute(text(f"UPDATE watchlist SET ativo=1, nome='{item.nome or ""}', classe='{item.classe}', mercado='{item.mercado}' WHERE ticker='{ticker}'"))
+            db.commit()
+            return {"mensagem": f"{ticker} reativado na watchlist"}
+    db.execute(text(f"INSERT INTO watchlist (ticker, nome, classe, mercado) VALUES ('{ticker}', '{item.nome or ""}', '{item.classe}', '{item.mercado}')"))
     db.commit()
-    return {"mensagem": f"{ticker} adicionado à watchlist"}
-
+    return {"mensagem": f"{ticker} adicionado a watchlist"}
 @app.delete("/watchlist/{ticker}")
 def remover_watchlist(ticker: str, db: Session = Depends(get_db)):
     from sqlalchemy import text

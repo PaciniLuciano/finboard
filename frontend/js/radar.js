@@ -5,8 +5,8 @@ async function carregarRadar() {
   content.innerHTML = '<div class="loading">⏳ Calculando scores — pode levar 30 segundos...</div>';
 
   try {
-    const endpoint = radarFonte === 'watchlist' ? '/radar/watchlist' : '/radar';
-    const data = await fetch(endpoint).then(r => r.json());
+    const endpoint = radarFonte === 'watchlist' ? '/radar?origem=watchlist' : '/radar?origem=carteira';
+    const data = await fetch(endpoint + '&forcar=true').then(r => r.json());
 
     const regimeCor = {
       'DEFENSIVO': '#8B1A1A',
