@@ -85,6 +85,11 @@ def listar_ativos(db: Session = Depends(get_db)):
     for a in ativos:
         preco_atual = buscar_preco(a.ticker, a.mercado)
         preco = preco_atual.get("preco") or 0
+        
+        # Fallback para FUNDO_INVEST se não houver preço no cache
+        if a.classe == "FUNDO_INVEST" and preco == 0:
+            preco = a.preco_medio
+
         variacao = preco_atual.get("variacao_dia") or 0
         valor_atual = preco * a.quantidade
         valor_investido = a.preco_medio * a.quantidade
@@ -107,6 +112,24 @@ def listar_ativos(db: Session = Depends(get_db)):
             "moeda": a.moeda
         })
     return resultado
+
+@app.patch("/ativos/{ticker}/preco")
+def atualizar_preco_manual(ticker: str, preco_data: dict, db: Session = Depends(get_db)):
+    """Atualiza o preço de um ativo manualmente (útil para fundos não listados)."""
+    from backend.data.cache import salvar_cache
+    ticker = ticker.upper()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
+    if not ativo:
+        raise HTTPException(status_code=404, detail="Ativo não encontrado")
+    
+    novo_preco = preco_data.get("preco")
+    if novo_preco is None:
+        raise HTTPException(status_code=400, detail="Preço não informado")
+    
+    # Salva no cache para refletir na listagem imediatamente
+    salvar_cache(ticker, {"preco": novo_preco, "fonte": "manual", "variacao_dia": 0})
+    
+    return {"mensagem": f"Preço de {ticker} atualizado para R$ {novo_preco}"}
 
 @app.delete("/ativos/{ticker}")
 def remover_ativo(ticker: str, db: Session = Depends(get_db)):
@@ -202,14 +225,28 @@ def resumo_carteira(db: Session = Depends(get_db)):
 
 # ── EXPORTAR ─────────────────────────────────────────────
 
-def _df_para_resposta(df: pd.DataFrame, nome: str, formato: str) -> StreamingResponse:
+def _df_para_resposta(df: pd.DataFrame, nome: str, formato: str, extra_dfs: dict = None) -> StreamingResponse:
     if formato == "xlsx":
         buf = io.BytesIO()
-        df.to_excel(buf, index=False)
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name="Carteira")
+            if extra_dfs:
+                for sheet_name, extra_df in extra_dfs.items():
+                    extra_df.to_excel(writer, index=False, sheet_name=sheet_name)
         buf.seek(0)
         return StreamingResponse(buf,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f"attachment; filename={nome}.xlsx"})
+    
+    # CSV: Se houver extra_dfs, concatena para "exportar tudo" no mesmo arquivo
+    if extra_dfs:
+        combined_df = df.copy()
+        for sheet_name, extra_df in extra_dfs.items():
+            # Adiciona uma coluna para identificar a seção no CSV combinado
+            extra_df_tagged = extra_df.copy()
+            combined_df = pd.concat([combined_df, extra_df_tagged], ignore_index=True, sort=False)
+        df = combined_df
+
     buf = io.StringIO()
     df.to_csv(buf, index=False)
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
@@ -217,14 +254,54 @@ def _df_para_resposta(df: pd.DataFrame, nome: str, formato: str) -> StreamingRes
 
 @app.get("/exportar/carteira")
 def exportar_carteira(formato: str = "csv", db: Session = Depends(get_db)):
+    # Ativos Variáveis
     ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
-    df = pd.DataFrame([{
-        "ticker": a.ticker, "nome": a.nome or "", "classe": a.classe,
-        "mercado": a.mercado, "quantidade": a.quantidade,
-        "preco_medio": a.preco_medio, "moeda": a.moeda,
-        "data_compra": str(a.data_compra) if a.data_compra else "",
-    } for a in ativos])
-    return _df_para_resposta(df, "carteira", formato)
+    dados_ativos = [{
+        "secao": "VARIÁVEL",
+        "ticker/emissor": a.ticker,
+        "nome": a.nome or "",
+        "classe": a.classe,
+        "mercado": a.mercado,
+        "quantidade/valor": a.quantidade,
+        "preco_medio/taxa": a.preco_medio,
+        "moeda": a.moeda,
+        "data_compra/vencimento": str(a.data_compra) if a.data_compra else "",
+        "indexador": "",
+        "liquidez": ""
+    } for a in ativos]
+
+    # Renda Fixa
+    rfs = db.query(RendaFixa).filter(RendaFixa.ativo == True).all()
+    dados_rf = [{
+        "secao": "RENDA FIXA",
+        "ticker/emissor": rf.emissor,
+        "nome": rf.tipo,
+        "classe": "RENDA_FIXA",
+        "mercado": "BR",
+        "quantidade/valor": rf.valor_aplicado,
+        "preco_medio/taxa": rf.taxa_pct,
+        "moeda": "BRL",
+        "data_compra/vencimento": str(rf.vencimento) if rf.vencimento else "",
+        "indexador": rf.indexador,
+        "liquidez": rf.liquidez
+    } for rf in rfs]
+
+    df_carteira = pd.DataFrame(dados_ativos + dados_rf)
+
+    # Dividendos
+    divs = db.query(Dividendo).all()
+    df_divs = pd.DataFrame([{
+        "secao": "DIVIDENDOS",
+        "ticker": d.ticker,
+        "valor_por_cota": d.valor_por_cota,
+        "quantidade_cotas": d.quantidade_cotas,
+        "valor_total": d.valor_total,
+        "data_pagamento": str(d.data_pagamento) if d.data_pagamento else "",
+        "tipo": d.tipo
+    } for d in divs])
+
+    return _df_para_resposta(df_carteira, "finboard_export_completo", formato, extra_dfs={"Dividendos": df_divs})
+
 
 @app.get("/exportar/watchlist")
 def exportar_watchlist(formato: str = "csv", db: Session = Depends(get_db)):

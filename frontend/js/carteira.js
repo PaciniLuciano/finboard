@@ -18,8 +18,13 @@ async function carregarCarteira() {
       const varSinal = a.variacao_dia >= 0 ? '▲ +' : '▼ ';
       const retCls = a.retorno_pct >= 0 ? 'p-green' : 'p-red';
       const retSinal = a.retorno_pct >= 0 ? '+' : '';
-      const classePill = {ACAO:'p-gray',FII:'p-gold',ETF_BR:'p-blue',ETF_EUA:'p-green',TESOURO:'p-blue'}[a.classe] || 'p-gray';
+      const classePill = {ACAO:'p-gray',FII:'p-gold',ETF_BR:'p-blue',ETF_EUA:'p-green',TESOURO:'p-blue',FUNDO_INVEST:'p-gray'}[a.classe] || 'p-gray';
       const nome = (a.nome || '').replace(/'/g, "\\'");
+
+      const btnPreco = a.classe === 'FUNDO_INVEST' ? `
+        <button onclick="abrirPrecoManual('${a.ticker}', ${a.preco_atual})"
+          style="padding:3px 8px;font-size:10px;background:#1A5C8A;color:white;border:none;border-radius:4px;cursor:pointer;">Preço</button>
+      ` : '';
 
       return `<tr>
         <td><div class="ticker">${a.ticker}</div><div class="nome-dim">${a.nome || ''}</div></td>
@@ -33,6 +38,7 @@ async function carregarCarteira() {
         <td><span class="pill ${retCls}">${retSinal}${fmt(a.retorno_pct)}%</span></td>
         <td>
           <div style="display:flex;gap:4px;">
+            ${btnPreco}
             <button onclick="abrirCompra('${a.ticker}','${nome}',${a.quantidade},${a.preco_medio},${a.preco_atual})"
               style="padding:3px 8px;font-size:10px;background:#1E6E3A;color:white;border:none;border-radius:4px;cursor:pointer;">+Compra</button>
             <button onclick="abrirVenda('${a.ticker}','${nome}',${a.quantidade},${a.preco_medio},${a.preco_atual})"
@@ -166,4 +172,31 @@ async function excluirAtivo(ticker) {
 
 function fecharModal(id) {
   document.getElementById(id).style.display = 'none';
+}
+
+function abrirPrecoManual(ticker, precoAtual) {
+  ativoSelecionado = { ticker };
+  document.getElementById('modal-preco-ticker').textContent = `${ticker} · Preço atual: R$ ${precoAtual}`;
+  document.getElementById('preco-novo-valor').value = precoAtual;
+  document.getElementById('modal-preco').style.display = 'flex';
+}
+
+async function confirmarPrecoManual() {
+  const ticker = ativoSelecionado.ticker;
+  const preco = parseFloat(document.getElementById('preco-novo-valor').value);
+  if (!preco) return;
+  try {
+    const res = await fetch(`/ativos/${ticker}/preco`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preco })
+    });
+    if (res.ok) {
+      fecharModal('modal-preco');
+      carregarCarteira();
+    } else {
+      const data = await res.json();
+      alert(data.detail);
+    }
+  } catch(e) { alert('Erro ao atualizar preço.'); }
 }
