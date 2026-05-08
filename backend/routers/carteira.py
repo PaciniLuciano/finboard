@@ -41,8 +41,8 @@ def resumo_carteira(db: Session = Depends(get_db)):
     return {
         "patrimonio_total": round(t_atual, 2),
         "total_investido": round(t_investido, 2),
-        "lucro_prejuizo": round(t_atual - t_investido, 2),
-        "retorno_pct": round((t_atual / t_investido - 1) * 100, 2) if t_investido > 0 else 0,
+        "retorno_total_rs": round(t_atual - t_investido, 2),
+        "retorno_total_pct": round((t_atual / t_investido - 1) * 100, 2) if t_investido > 0 else 0,
         "por_classe": {k: round(v, 2) for k, v in por_classe.items()},
         "cambio_usd_brl": round(cambio, 4),
     }

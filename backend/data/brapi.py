@@ -109,30 +109,32 @@ def buscar_multiplos(tickers: list, mercado: str = "BR") -> list:
 def buscar_cambio_usd_brl() -> float:
     """Busca câmbio USD/BRL atual."""
     try:
-        session = requests.Session()
-        session.verify = False
-        cambio = yf.Ticker("USDBRL=X", session=session)
+        cambio = yf.Ticker("USDBRL=X")
         info = cambio.info
-        return info.get("regularMarketPrice") or info.get("previousClose") or 5.20
+        return info.get("regularMarketPrice") or info.get("previousClose") or 0.0
     except:
-        return 5.20
+        return 0.0
 
 def buscar_ibovespa() -> dict:
     """Busca dados do Ibovespa."""
     try:
-        session = requests.Session()
-        session.verify = False
-        ibov = yf.Ticker("^BVSP", session=session)
+        ibov = yf.Ticker("^BVSP")
         info = ibov.info
         return {
             "ticker": "IBOV",
-            "preco": info.get("regularMarketPrice"),
+            "preco": info.get("regularMarketPrice") or info.get("previousClose") or 0.0,
             "variacao_dia": round(info.get("regularMarketChangePercent", 0), 2),
             "fonte": "yfinance",
             "atualizado_em": datetime.now().isoformat()
         }
     except Exception as e:
-        return {"erro": str(e)}
+        return {
+            "ticker": "IBOV",
+            "preco": 0.0,
+            "variacao_dia": 0.0,
+            "erro": str(e),
+            "atualizado_em": datetime.now().isoformat()
+        }
 
 if __name__ == "__main__":
     print("Testando fontes de dados...\n")
