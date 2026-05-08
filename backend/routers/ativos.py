@@ -5,7 +5,7 @@ from typing import Optional
 from datetime import date
 
 from backend.database import get_db, Ativo
-from backend.data.cache import buscar_preco_com_cache as buscar_preco
+from backend.data.cache import buscar_preco_com_cache as buscar_preco, salvar_cache
 
 router = APIRouter()
 
@@ -73,10 +73,14 @@ def listar_ativos(db: Session = Depends(get_db)):
     for a in ativos:
         preco_atual = buscar_preco(a.ticker, a.mercado)
         preco = preco_atual.get("preco") or 0
+        if a.classe == "FUNDO_INVEST" and preco == 0:
+            preco = a.preco_medio or 0
         variacao = preco_atual.get("variacao_dia") or 0
-        valor_atual = preco * a.quantidade
-        valor_investido = a.preco_medio * a.quantidade
-        retorno_pct = ((preco - a.preco_medio) / a.preco_medio * 100) if a.preco_medio > 0 else 0
+        qtd = a.quantidade or 0
+        pm = a.preco_medio or 0
+        valor_atual = preco * qtd
+        valor_investido = pm * qtd
+        retorno_pct = ((preco - pm) / pm * 100) if pm > 0 else 0
         resultado.append({
             "id": a.id,
             "ticker": a.ticker,
@@ -94,6 +98,19 @@ def listar_ativos(db: Session = Depends(get_db)):
             "moeda": a.moeda,
         })
     return resultado
+
+
+@router.patch("/ativos/{ticker}/preco")
+def atualizar_preco_manual(ticker: str, preco_data: dict, db: Session = Depends(get_db)):
+    ticker = ticker.upper()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
+    if not ativo:
+        raise HTTPException(status_code=404, detail="Ativo não encontrado")
+    novo_preco = preco_data.get("preco")
+    if novo_preco is None:
+        raise HTTPException(status_code=400, detail="Preço não informado")
+    salvar_cache(ticker, {"preco": novo_preco, "fonte": "manual", "variacao_dia": 0})
+    return {"mensagem": f"Preço de {ticker} atualizado para R$ {novo_preco}"}
 
 
 @router.delete("/ativos/{ticker}")

@@ -12,39 +12,37 @@ router = APIRouter()
 def resumo_carteira(db: Session = Depends(get_db)):
     ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
     rfs = db.query(RendaFixa).filter(RendaFixa.ativo == True).all()
-    cambio = buscar_cambio_usd_brl()
+    cambio = buscar_cambio_usd_brl() or 5.0
 
-    total_investido = 0
-    total_atual = 0
+    t_investido = 0.0
+    t_atual = 0.0
     por_classe: dict = {}
 
     for a in ativos:
-        preco_atual = buscar_preco(a.ticker, a.mercado)
-        preco = preco_atual.get("preco") or a.preco_medio
+        p_atual = buscar_preco(a.ticker, a.mercado).get("preco") or a.preco_medio or 0
+        qtd = a.quantidade or 0
+        pm = a.preco_medio or 0
+        v_invest = pm * qtd
+        v_atual = p_atual * qtd
         if a.mercado == "EUA":
-            preco = preco * cambio
-
-        valor_atual = preco * a.quantidade
-        valor_investido = a.preco_medio * a.quantidade
-        if a.mercado == "EUA":
-            valor_investido = valor_investido * cambio
-
-        total_investido += valor_investido
-        total_atual += valor_atual
-        por_classe[a.classe] = por_classe.get(a.classe, 0) + valor_atual
+            v_invest *= cambio
+            v_atual *= cambio
+        t_investido += v_invest
+        t_atual += v_atual
+        classe = a.classe or "OUTROS"
+        por_classe[classe] = por_classe.get(classe, 0) + v_atual
 
     for rf in rfs:
-        total_investido += rf.valor_aplicado
-        total_atual += rf.valor_aplicado
-        por_classe["RF"] = por_classe.get("RF", 0) + rf.valor_aplicado
-
-    retorno_total = ((total_atual - total_investido) / total_investido * 100) if total_investido > 0 else 0
+        valor = rf.valor_aplicado or 0
+        t_investido += valor
+        t_atual += valor
+        por_classe["RENDA_FIXA"] = por_classe.get("RENDA_FIXA", 0) + valor
 
     return {
-        "patrimonio_total": round(total_atual, 2),
-        "total_investido": round(total_investido, 2),
-        "retorno_total_pct": round(retorno_total, 2),
-        "retorno_total_rs": round(total_atual - total_investido, 2),
+        "patrimonio_total": round(t_atual, 2),
+        "total_investido": round(t_investido, 2),
+        "lucro_prejuizo": round(t_atual - t_investido, 2),
+        "retorno_pct": round((t_atual / t_investido - 1) * 100, 2) if t_investido > 0 else 0,
         "por_classe": {k: round(v, 2) for k, v in por_classe.items()},
-        "cambio_usd_brl": cambio,
+        "cambio_usd_brl": round(cambio, 4),
     }
