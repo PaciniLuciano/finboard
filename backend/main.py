@@ -341,7 +341,15 @@ async def importar_carteira(arquivo: UploadFile = File(...), db: Session = Depen
         "data_compra/vencimento": "data_compra",
         "tipo_registro": "secao"
     }
-    df = df.rename(columns=mapeamento)
+    
+    # Mescla colunas sinônimas se ambas existirem (evita erro de Series ambígua)
+    for col_nova, col_antiga in mapeamento.items():
+        if col_nova in df.columns:
+            if col_antiga in df.columns:
+                df[col_antiga] = df[col_antiga].fillna(df[col_nova])
+                df = df.drop(columns=[col_nova])
+            else:
+                df = df.rename(columns={col_nova: col_antiga})
 
     obrigatorios = {"ticker", "classe", "quantidade", "preco_medio"}
     ausentes = obrigatorios - set(df.columns)
