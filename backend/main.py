@@ -332,6 +332,17 @@ async def importar_carteira(arquivo: UploadFile = File(...), db: Session = Depen
         raise HTTPException(status_code=400, detail=f"Erro ao ler arquivo: {e}")
 
     df.columns = df.columns.str.lower().str.strip()
+    
+    # Mapeamento de sinônimos para suportar o novo formato de exportação
+    mapeamento = {
+        "ticker/emissor": "ticker",
+        "quantidade/valor": "quantidade",
+        "preco_medio/taxa": "preco_medio",
+        "data_compra/vencimento": "data_compra",
+        "tipo_registro": "secao"
+    }
+    df = df.rename(columns=mapeamento)
+
     obrigatorios = {"ticker", "classe", "quantidade", "preco_medio"}
     ausentes = obrigatorios - set(df.columns)
     if ausentes:
@@ -339,46 +350,84 @@ async def importar_carteira(arquivo: UploadFile = File(...), db: Session = Depen
 
     importados, atualizados, erros = 0, 0, []
     for _, row in df.iterrows():
-        ticker = _str(row.get("ticker")).upper()
-        if not ticker or ticker.upper() == "NAN":
-            continue
-        try:
-            data_compra = None
-            raw_data = row.get("data_compra")
-            if not pd.isna(raw_data) and str(raw_data).strip():
-                try:
-                    data_compra = pd.to_datetime(raw_data).date()
-                except Exception:
-                    pass
+        secao = _str(row.get("secao"), "VARIÁVEL").upper()
+        
+        # Lógica para VARIÁVEL (Ativos)
+        if secao == "VARIÁVEL" or row.get("classe") != "RENDA_FIXA":
+            ticker = _str(row.get("ticker")).upper()
+            if not ticker or ticker == "NAN": continue
+            try:
+                data_compra = None
+                raw_data = row.get("data_compra")
+                if not pd.isna(raw_data) and str(raw_data).strip():
+                    try: data_compra = pd.to_datetime(raw_data).date()
+                    except: pass
 
-            existente = db.query(Ativo).filter(Ativo.ticker == ticker).first()
-            if existente:
-                existente.ativo = True
-                existente.quantidade  = float(row["quantidade"])
-                existente.preco_medio = float(row["preco_medio"])
-                existente.classe      = _str(row.get("classe"), existente.classe)
-                existente.mercado     = _str(row.get("mercado"), existente.mercado)
-                existente.nome        = _str(row.get("nome")) or existente.nome
-                if data_compra:
-                    existente.data_compra = data_compra
-                atualizados += 1
-            else:
-                db.add(Ativo(
-                    ticker=ticker,
-                    nome=_str(row.get("nome")) or None,
-                    classe=_str(row.get("classe"), "ACAO"),
-                    mercado=_str(row.get("mercado"), "BR"),
-                    quantidade=float(row["quantidade"]),
-                    preco_medio=float(row["preco_medio"]),
-                    moeda=_str(row.get("moeda"), "BRL"),
-                    data_compra=data_compra,
-                ))
-                importados += 1
-        except Exception as e:
-            erros.append(f"{ticker}: {e}")
+                existente = db.query(Ativo).filter(Ativo.ticker == ticker).first()
+                if existente:
+                    existente.ativo = True
+                    existente.quantidade  = float(row["quantidade"])
+                    existente.preco_medio = float(row["preco_medio"])
+                    existente.classe      = _str(row.get("classe"), existente.classe)
+                    existente.mercado     = _str(row.get("mercado"), existente.mercado)
+                    existente.nome        = _str(row.get("nome")) or existente.nome
+                    if data_compra: existente.data_compra = data_compra
+                    atualizados += 1
+                else:
+                    db.add(Ativo(
+                        ticker=ticker,
+                        nome=_str(row.get("nome")) or None,
+                        classe=_str(row.get("classe"), "ACAO"),
+                        mercado=_str(row.get("mercado"), "BR"),
+                        quantidade=float(row["quantidade"]),
+                        preco_medio=float(row["preco_medio"]),
+                        moeda=_str(row.get("moeda"), "BRL"),
+                        data_compra=data_compra
+                    ))
+                    importados += 1
+            except Exception as e:
+                erros.append(f"{ticker}: {e}")
+
+        # Lógica para RENDA FIXA
+        elif secao == "RENDA FIXA" or row.get("classe") == "RENDA_FIXA":
+            emissor = _str(row.get("ticker")) # no rename virou ticker
+            if not emissor or emissor == "NAN": continue
+            try:
+                vencimento = None
+                raw_venc = row.get("data_compra") # no rename virou data_compra
+                if not pd.isna(raw_venc) and str(raw_venc).strip():
+                    try: vencimento = pd.to_datetime(raw_venc).date()
+                    except: pass
+
+                # Procura RF existente pelo emissor e tipo para evitar duplicidade
+                tipo = _str(row.get("nome"), "CDB")
+                existente = db.query(RendaFixa).filter(RendaFixa.emissor == emissor, RendaFixa.tipo == tipo).first()
+                
+                if existente:
+                    existente.ativo = True
+                    existente.valor_aplicado = float(row["quantidade"])
+                    existente.taxa_pct = float(row["preco_medio"])
+                    existente.indexador = _str(row.get("indexador"), existente.indexador)
+                    existente.liquidez = _str(row.get("liquidez"), existente.liquidez)
+                    if vencimento: existente.vencimento = vencimento
+                    atualizados += 1
+                else:
+                    db.add(RendaFixa(
+                        emissor=emissor,
+                        tipo=tipo,
+                        indexador=_str(row.get("indexador"), "CDI"),
+                        taxa_pct=float(row["preco_medio"]),
+                        vencimento=vencimento,
+                        valor_aplicado=float(row["quantidade"]),
+                        liquidez=_str(row.get("liquidez"), "VENCIMENTO")
+                    ))
+                    importados += 1
+            except Exception as e:
+                erros.append(f"RF {emissor}: {e}")
 
     db.commit()
     return {"importados": importados, "atualizados": atualizados, "erros": erros}
+
 
 @app.post("/importar/watchlist")
 async def importar_watchlist(arquivo: UploadFile = File(...), db: Session = Depends(get_db)):
