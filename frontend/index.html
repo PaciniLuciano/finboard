@@ -112,6 +112,7 @@
       <button class="nav-item" onclick="showPanel('rendafixa')"><span class="icon">🏦</span> Renda Fixa</button>
       <button class="nav-item" onclick="showPanel('mercado')"><span class="icon">⊙</span> Preços ao Vivo</button>
       <button class="nav-item" onclick="showPanel('grafico')"><span class="icon">📈</span> Gráfico</button>
+      <button class="nav-item" onclick="showPanel('premio')"><span class="icon">⚖</span> Prêmio de Risco</button>
     </div>
   </nav>
 
@@ -711,6 +712,22 @@
       </div>
     </div>
 
+    <!-- PAINEL PRÊMIO DE RISCO -->
+    <div id="panel-premio" class="panel">
+      <div class="main-header">
+        <div>
+          <h2>Prêmio de Risco</h2>
+          <div class="sub">Qual ativo remunera acima do CDI com margem suficiente para o risco?</div>
+        </div>
+        <button class="btn-gold" onclick="carregarPremioRisco(true)">↺ Recalcular</button>
+      </div>
+      <div class="main-content">
+        <div id="premio-content">
+          <div class="loading">Clique em Recalcular para analisar.</div>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /main -->
 </div><!-- /layout -->
 
@@ -723,6 +740,7 @@
 <script src="/frontend/js/grafico.js"></script>
 <script src="/frontend/js/exportar.js"></script>
 <script src="/frontend/js/config.js"></script>
+<script src="/frontend/js/premio_risco.js"></script>
 <script>
 function showPanel(id) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -735,6 +753,7 @@ function showPanel(id) {
   if (id === 'rendafixa') carregarRendaFixa();
   if (id === 'dividendos') { carregarDividendos(); carregarRetornoTotal(); }
   if (id === 'configuracoes') carregarConfig();
+  if (id === 'premio') carregarPremioRisco();
 }
 
 function fmt(v, decimais = 2) {
