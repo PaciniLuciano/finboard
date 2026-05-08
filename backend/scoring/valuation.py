@@ -1,5 +1,6 @@
 import yfinance as yf
 from datetime import datetime
+from backend.scoring.utils import normalizar_dy
 
 def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "BR") -> dict:
     try:
@@ -29,7 +30,7 @@ def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "BR") -
 
             dy = info.get("dividendYield")
             if dy:
-                dy_pct = float(dy) * 100
+                dy_pct = normalizar_dy(dy)
                 detalhes["dy"] = round(dy_pct, 2)
                 if dy_pct > 8: pontos += 2
                 elif dy_pct > 4: pontos += 1
@@ -59,7 +60,7 @@ def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "BR") -
 
             dy = info.get("dividendYield")
             if dy:
-                dy_pct = float(dy) * 100
+                dy_pct = normalizar_dy(dy)
                 detalhes["dy"] = round(dy_pct, 2)
                 if dy_pct > 10: pontos += 4
                 elif dy_pct > 8: pontos += 3
@@ -78,7 +79,7 @@ def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "BR") -
 
             dy = info.get("dividendYield")
             if dy:
-                dy_pct = float(dy) * 100
+                dy_pct = normalizar_dy(dy)
                 detalhes["dy"] = round(dy_pct, 2)
                 if dy_pct > 3: pontos += 3
                 elif dy_pct > 1.5: pontos += 2

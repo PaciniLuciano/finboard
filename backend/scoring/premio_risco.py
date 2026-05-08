@@ -1,5 +1,6 @@
 import time
 import yfinance as yf
+from backend.scoring.utils import normalizar_dy
 
 _CACHE_TTL = 30 * 60
 _cache: dict = {}
@@ -49,9 +50,9 @@ def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
         info = yf.Ticker(ticker_yf).info
 
         pe_raw = info.get("trailingPE") or info.get("forwardPE")
-        dy_raw = info.get("dividendYield") or 0
+
         pe = float(pe_raw) if pe_raw else None
-        dy = round(float(dy_raw) * 100, 2) if dy_raw else 0
+        dy = normalizar_dy(info.get("dividendYield"))
 
         yield_esperado = None
         yield_tipo = None
