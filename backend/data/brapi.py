@@ -1,8 +1,12 @@
 import yfinance as yf
 import requests
 import os
+import urllib3
 from datetime import datetime
 from dotenv import load_dotenv
+
+# Desabilita avisos de conexão insegura (necessário ao usar verify=False)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 load_dotenv()
 BRAPI_TOKEN = os.getenv("BRAPI_TOKEN")
@@ -14,7 +18,8 @@ def buscar_preco_brapi(ticker: str) -> dict:
     """Busca preço via brapi.dev — usado para ETFs BR."""
     try:
         url = f"{BRAPI_URL}/quote/{ticker}?token={BRAPI_TOKEN}"
-        response = requests.get(url, timeout=10)
+        # verify=False ignora erro de certificado SSL da rede corporativa
+        response = requests.get(url, timeout=10, verify=False)
         data = response.json()
 
         if "results" not in data or not data["results"]:
@@ -40,7 +45,12 @@ def buscar_preco_yfinance(ticker: str, mercado: str = "BR") -> dict:
     """Busca preço via yfinance."""
     try:
         ticker_yf = f"{ticker}.SA" if mercado == "BR" else ticker
-        ativo = yf.Ticker(ticker_yf)
+        
+        # Configura sessão para ignorar SSL no yfinance
+        session = requests.Session()
+        session.verify = False
+        
+        ativo = yf.Ticker(ticker_yf, session=session)
         info = ativo.info
 
         preco = (
@@ -99,7 +109,9 @@ def buscar_multiplos(tickers: list, mercado: str = "BR") -> list:
 def buscar_cambio_usd_brl() -> float:
     """Busca câmbio USD/BRL atual."""
     try:
-        cambio = yf.Ticker("USDBRL=X")
+        session = requests.Session()
+        session.verify = False
+        cambio = yf.Ticker("USDBRL=X", session=session)
         info = cambio.info
         return info.get("regularMarketPrice") or info.get("previousClose") or 5.20
     except:
@@ -108,7 +120,9 @@ def buscar_cambio_usd_brl() -> float:
 def buscar_ibovespa() -> dict:
     """Busca dados do Ibovespa."""
     try:
-        ibov = yf.Ticker("^BVSP")
+        session = requests.Session()
+        session.verify = False
+        ibov = yf.Ticker("^BVSP", session=session)
         info = ibov.info
         return {
             "ticker": "IBOV",
