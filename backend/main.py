@@ -88,12 +88,15 @@ def listar_ativos(db: Session = Depends(get_db)):
         
         # Fallback para FUNDO_INVEST se não houver preço no cache
         if a.classe == "FUNDO_INVEST" and preco == 0:
-            preco = a.preco_medio
+            preco = a.preco_medio or 0
 
         variacao = preco_atual.get("variacao_dia") or 0
-        valor_atual = preco * a.quantidade
-        valor_investido = a.preco_medio * a.quantidade
-        retorno_pct = ((preco - a.preco_medio) / a.preco_medio * 100) if a.preco_medio > 0 else 0
+        qtd = a.quantidade or 0
+        pm = a.preco_medio or 0
+        
+        valor_atual = preco * qtd
+        valor_investido = pm * qtd
+        retorno_pct = ((preco - pm) / pm * 100) if pm > 0 else 0
 
         resultado.append({
             "id": a.id,
@@ -188,14 +191,17 @@ def resumo_carteira(db: Session = Depends(get_db)):
 
     for a in ativos:
         preco_atual = buscar_preco(a.ticker, a.mercado)
-        preco = preco_atual.get("preco") or a.preco_medio
+        preco = preco_atual.get("preco") or a.preco_medio or 0
         if a.mercado == "EUA":
-            preco = preco * cambio
+            preco = preco * (cambio or 1)
 
-        valor_atual = preco * a.quantidade
-        valor_investido = a.preco_medio * a.quantidade
+        qtd = a.quantidade or 0
+        pm = a.preco_medio or 0
+
+        valor_atual = preco * qtd
+        valor_investido = pm * qtd
         if a.mercado == "EUA":
-            valor_investido = valor_investido * cambio
+            valor_investido = valor_investido * (cambio or 1)
 
         total_investido += valor_investido
         total_atual += valor_atual
