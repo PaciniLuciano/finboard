@@ -1,5 +1,4 @@
 import time
-import requests
 import yfinance as yf
 
 _CACHE_TTL = 30 * 60
@@ -23,31 +22,39 @@ def calcular_premio(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
         return {**cached["data"], "cache": True}
 
     resultado = _calcular(ticker, classe, mercado, cdi)
-    _cache[chave] = {"data": resultado, "ts": time.monotonic()}
+    # Não cacheia erros — permite retry na próxima chamada
+    if resultado["sinal"] != "ERRO":
+        _cache[chave] = {"data": resultado, "ts": time.monotonic()}
     return resultado
 
 
 def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
-    base = {"ticker": ticker, "classe": classe, "cache": False}
-
     premio_minimo = PREMIO_MINIMO.get(classe)
+    benchmark = round(cdi + premio_minimo, 2) if premio_minimo is not None else None
+    base = {
+        "ticker": ticker,
+        "classe": classe,
+        "cdi": round(cdi, 2),
+        "benchmark": benchmark,
+        "premio_minimo": premio_minimo,
+        "cache": False,
+    }
+
     if premio_minimo is None:
         return {**base, "yield_esperado": None, "sinal": "N/A",
                 "detalhes": {}, "yield_tipo": None}
 
     try:
-        session = requests.Session()
-        session.verify = False
         ticker_yf = f"{ticker.upper()}.SA" if mercado == "BR" else ticker.upper()
-        info = yf.Ticker(ticker_yf, session=session).info
+        info = yf.Ticker(ticker_yf).info
 
         pe_raw = info.get("trailingPE") or info.get("forwardPE")
         dy_raw = info.get("dividendYield") or 0
-        pe  = float(pe_raw) if pe_raw else None
-        dy  = round(float(dy_raw) * 100, 2) if dy_raw else 0
+        pe = float(pe_raw) if pe_raw else None
+        dy = round(float(dy_raw) * 100, 2) if dy_raw else 0
 
-        yield_esperado: float | None = None
-        yield_tipo: str | None = None
+        yield_esperado = None
+        yield_tipo = None
 
         if classe == "FII":
             if dy > 0:
@@ -62,11 +69,11 @@ def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
 
         if yield_esperado is None:
             return {**base, "yield_esperado": None, "sinal": "SEM_DADO",
-                    "yield_tipo": None, "detalhes": {"pe": pe, "dy": dy}}
+                    "yield_tipo": None, "detalhes": {"pe": pe, "dy": dy},
+                    "premio_cdi": None, "gap": None}
 
-        benchmark   = round(cdi + premio_minimo, 2)
-        premio_cdi  = round(yield_esperado - cdi, 2)
-        gap         = round(yield_esperado - benchmark, 2)
+        premio_cdi = round(yield_esperado - cdi, 2)
+        gap = round(yield_esperado - benchmark, 2)
 
         if yield_esperado >= benchmark:
             sinal = "ATRATIVO"
@@ -79,9 +86,6 @@ def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
             **base,
             "yield_esperado": yield_esperado,
             "yield_tipo": yield_tipo,
-            "cdi": round(cdi, 2),
-            "benchmark": benchmark,
-            "premio_minimo": premio_minimo,
             "premio_cdi": premio_cdi,
             "gap": gap,
             "sinal": sinal,
@@ -90,4 +94,5 @@ def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
 
     except Exception as e:
         return {**base, "yield_esperado": None, "sinal": "ERRO",
-                "yield_tipo": None, "detalhes": {}, "erro": str(e)}
+                "yield_tipo": None, "detalhes": {}, "premio_cdi": None, "gap": None,
+                "erro": str(e)}

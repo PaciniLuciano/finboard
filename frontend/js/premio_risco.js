@@ -87,7 +87,7 @@ function renderPremio(data) {
       : '—';
 
     const benchStr = a.benchmark != null
-      ? `${fmt(a.benchmark)}%<br><small style="color:#888;">(+${fmt(a.premio_minimo||0)}%)</small>`
+      ? `${fmt(a.benchmark)}%` + (a.premio_minimo > 0 ? `<br><small style="color:#888;">(+${fmt(a.premio_minimo)}%)</small>` : '')
       : '—';
 
     const premioCdiStr = a.premio_cdi != null
@@ -98,11 +98,13 @@ function renderPremio(data) {
       ? `<span style="color:${a.gap >= 0 ? '#1E6E3A' : '#8B1A1A'};font-weight:700;">${a.gap >= 0 ? '+' : ''}${fmt(a.gap)}%</span>`
       : '—';
 
-    const detStr = a.detalhes?.pe
-      ? `<small style="color:#aaa;">P/L ${fmt(a.detalhes.pe)}</small>`
-      : a.detalhes?.dy
-        ? `<small style="color:#aaa;">DY ${fmt(a.detalhes.dy)}%</small>`
-        : '';
+    const detStr = a.erro
+      ? `<small style="color:#c55;font-size:9px;" title="${a.erro}">ver erro ⓘ</small>`
+      : a.detalhes?.pe
+        ? `<small style="color:#aaa;">P/L ${fmt(a.detalhes.pe)}</small>`
+        : a.detalhes?.dy
+          ? `<small style="color:#aaa;">DY ${fmt(a.detalhes.dy)}%</small>`
+          : '';
 
     html += `<tr>
       <td><div class="ticker">${a.ticker}</div>${detStr}</td>
