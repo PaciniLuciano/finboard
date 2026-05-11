@@ -1,4 +1,4 @@
-import threading, time, json
+import asyncio, json
 from datetime import datetime
 from backend.database import get_db, Ativo, Watchlist
 from backend.models_extra import ScoreCache
@@ -12,7 +12,7 @@ def calcular_sinal(score):
     if score >= 5.5: return "Neutro"
     return "Fraco"
 
-def atualizar_scores():
+async def atualizar_scores():
     print(f"[ScoreJob] Iniciando calculo: {datetime.now()}")
     db = next(get_db())
     try:
@@ -27,7 +27,7 @@ def atualizar_scores():
         for origem, lista_ativos in [("carteira", lista), ("watchlist", lista_wl)]:
             if not lista_ativos:
                 continue
-            scores = calcular_scores_carteira(lista_ativos)
+            scores = await calcular_scores_carteira(lista_ativos)
             # Apaga cache anterior dessa origem
             db.execute(text(f"DELETE FROM scores_cache WHERE origem='{origem}'"))
             for s in scores:
@@ -53,10 +53,15 @@ def atualizar_scores():
         db.close()
 
 def iniciar_job():
-    def loop():
+    async def loop():
         while True:
-            atualizar_scores()
-            time.sleep(INTERVALO)
-    t = threading.Thread(target=loop, daemon=True)
+            await atualizar_scores()
+            await asyncio.sleep(INTERVALO)
+            
+    def run_loop():
+        asyncio.run(loop())
+
+    import threading
+    t = threading.Thread(target=run_loop, daemon=True)
     t.start()
     print("[ScoreJob] Job iniciado — intervalo 30min")

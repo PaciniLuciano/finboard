@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date
+import asyncio
 
 from backend.database import get_db, Ativo
 from backend.data.cache import buscar_preco_com_cache as buscar_preco, salvar_cache
@@ -67,11 +68,11 @@ def cadastrar_ativo(ativo: AtivoCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/ativos")
-def listar_ativos(db: Session = Depends(get_db)):
+async def listar_ativos(db: Session = Depends(get_db)):
     ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
-    resultado = []
-    for a in ativos:
-        preco_atual = buscar_preco(a.ticker, a.mercado)
+    
+    async def get_ativo_info(a):
+        preco_atual = await buscar_preco(a.ticker, a.mercado)
         preco = preco_atual.get("preco") or 0
         if a.classe == "FUNDO_INVEST" and preco == 0:
             preco = a.preco_medio or 0
@@ -81,7 +82,7 @@ def listar_ativos(db: Session = Depends(get_db)):
         valor_atual = preco * qtd
         valor_investido = pm * qtd
         retorno_pct = ((preco - pm) / pm * 100) if pm > 0 else 0
-        resultado.append({
+        return {
             "id": a.id,
             "ticker": a.ticker,
             "nome": a.nome,
@@ -96,8 +97,10 @@ def listar_ativos(db: Session = Depends(get_db)):
             "retorno_pct": round(retorno_pct, 2),
             "retorno_rs": round(valor_atual - valor_investido, 2),
             "moeda": a.moeda,
-        })
-    return resultado
+        }
+
+    tasks = [get_ativo_info(a) for a in ativos]
+    return await asyncio.gather(*tasks)
 
 
 @router.patch("/ativos/{ticker}/preco")

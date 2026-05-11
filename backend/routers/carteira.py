@@ -5,21 +5,24 @@ from backend.database import get_db, Ativo, RendaFixa
 from backend.data.brapi import buscar_cambio_usd_brl
 from backend.data.cache import buscar_preco_com_cache as buscar_preco
 
+import asyncio
+
 router = APIRouter()
 
 
 @router.get("/carteira/resumo")
-def resumo_carteira(db: Session = Depends(get_db)):
+async def resumo_carteira(db: Session = Depends(get_db)):
     ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
     rfs = db.query(RendaFixa).filter(RendaFixa.ativo == True).all()
-    cambio = buscar_cambio_usd_brl() or 5.0
+    cambio = await buscar_cambio_usd_brl() or 5.0
 
     t_investido = 0.0
     t_atual = 0.0
     por_classe: dict = {}
 
-    for a in ativos:
-        p_atual = buscar_preco(a.ticker, a.mercado).get("preco") or a.preco_medio or 0
+    async def get_ativo_valor(a):
+        res = await buscar_preco(a.ticker, a.mercado)
+        p_atual = res.get("preco") or a.preco_medio or 0
         qtd = a.quantidade or 0
         pm = a.preco_medio or 0
         v_invest = pm * qtd
@@ -27,9 +30,13 @@ def resumo_carteira(db: Session = Depends(get_db)):
         if a.mercado == "EUA":
             v_invest *= cambio
             v_atual *= cambio
+        return v_invest, v_atual, a.classe or "OUTROS"
+
+    resultados = await asyncio.gather(*[get_ativo_valor(a) for a in ativos])
+    
+    for v_invest, v_atual, classe in resultados:
         t_investido += v_invest
         t_atual += v_atual
-        classe = a.classe or "OUTROS"
         por_classe[classe] = por_classe.get(classe, 0) + v_atual
 
     for rf in rfs:

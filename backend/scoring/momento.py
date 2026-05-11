@@ -1,3 +1,4 @@
+import asyncio
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
@@ -16,11 +17,15 @@ def converter_numpy(obj):
         return float(obj)
     return obj
 
-def calcular_momento(ticker: str, mercado: str = "BR") -> dict:
+async def calcular_momento(ticker: str, mercado: str = "BR") -> dict:
     try:
         ticker_yf = f"{ticker}.SA" if mercado == "BR" else ticker
+        
+        loop = asyncio.get_event_loop()
         ativo = yf.Ticker(ticker_yf)
-        hist = ativo.history(period="1y")
+        
+        # .history() involves I/O and processing, running in executor
+        hist = await loop.run_in_executor(None, ativo.history, "1y")
 
         if hist.empty or len(hist) < 50:
             return {"ticker": ticker, "score_momento": 5.0, "erro": "Historico insuficiente"}

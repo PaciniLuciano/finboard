@@ -52,7 +52,7 @@ def listar_todos_dividendos(db: Session = Depends(get_db)):
 
 
 @router.get("/retorno-total/{ticker}")
-def retorno_total(ticker: str, db: Session = Depends(get_db)):
+async def retorno_total(ticker: str, db: Session = Depends(get_db)):
     ticker = ticker.upper()
     ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
     if not ativo:
@@ -62,7 +62,7 @@ def retorno_total(ticker: str, db: Session = Depends(get_db)):
     total_dividendos = result[0] or 0
     qtd_proventos = result[1] or 0
 
-    preco_atual = buscar_preco(ativo.ticker, ativo.mercado)
+    preco_atual = await buscar_preco(ativo.ticker, ativo.mercado)
     preco = preco_atual.get("preco") or ativo.preco_medio
 
     valor_atual = preco * ativo.quantidade

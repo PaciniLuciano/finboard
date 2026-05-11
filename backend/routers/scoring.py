@@ -10,22 +10,22 @@ router = APIRouter()
 
 
 @router.get("/scoring/{ticker}")
-def score_ativo(ticker: str, classe: str = "ACAO", mercado: str = "BR"):
-    return calcular_score_final(ticker, classe, mercado)
+async def score_ativo(ticker: str, classe: str = "ACAO", mercado: str = "BR"):
+    return await calcular_score_final(ticker, classe, mercado)
 
 
 @router.get("/scoring/carteira/todos")
-def score_carteira(db: Session = Depends(get_db)):
+async def score_carteira(db: Session = Depends(get_db)):
     ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
     lista = [{"ticker": a.ticker, "classe": a.classe, "mercado": a.mercado} for a in ativos]
     if not lista:
         return []
-    return calcular_scores_carteira(lista)
+    return await calcular_scores_carteira(lista)
 
 
 @router.get("/macro/regime")
-def regime_macro(forcar: bool = False):
-    return calcular_regime_macro(forcar=forcar)
+async def regime_macro(forcar: bool = False):
+    return await calcular_regime_macro(forcar=forcar)
 
 
 @router.post("/macro/invalidar-cache")
@@ -35,15 +35,15 @@ def invalidar_macro():
 
 
 @router.get("/radar")
-def radar(origem: str = "carteira", forcar: bool = False, db: Session = Depends(get_db)):
+async def radar(origem: str = "carteira", forcar: bool = False, db: Session = Depends(get_db)):
     from backend.scorer_job import atualizar_scores
 
     cache = db.query(ScoreCache).filter(ScoreCache.origem == origem).all()
     if forcar or not cache:
-        atualizar_scores()
+        await atualizar_scores()
         cache = db.query(ScoreCache).filter(ScoreCache.origem == origem).all()
 
-    macro = calcular_regime_macro()
+    macro = await calcular_regime_macro()
     ativos = [{
         "ticker": s.ticker,
         "classe": s.classe,
@@ -67,13 +67,13 @@ def radar(origem: str = "carteira", forcar: bool = False, db: Session = Depends(
 
 
 @router.get("/radar/watchlist")
-def radar_watchlist(db: Session = Depends(get_db)):
+async def radar_watchlist(db: Session = Depends(get_db)):
     items = db.query(Watchlist).filter(Watchlist.ativo == True).all()
     lista = [{"ticker": i.ticker, "classe": i.classe, "mercado": i.mercado} for i in items]
     if not lista:
         return {"regime": "NEUTRO", "ativos": [], "fonte": "watchlist"}
-    macro = calcular_regime_macro()
-    scores = calcular_scores_carteira(lista)
+    macro = await calcular_regime_macro()
+    scores = await calcular_scores_carteira(lista)
     return {
         "regime": macro["regime"],
         "selic": macro["detalhes"]["selic_atual"],

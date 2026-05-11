@@ -6,18 +6,18 @@ router = APIRouter()
 
 
 @router.get("/mercado/preco/{ticker}")
-def preco_ativo(ticker: str, mercado: str = "BR"):
-    return buscar_preco(ticker, mercado)
+async def preco_ativo(ticker: str, mercado: str = "BR"):
+    return await buscar_preco(ticker, mercado)
 
 
 @router.get("/mercado/ibovespa")
-def ibovespa():
-    return buscar_ibovespa()
+async def ibovespa():
+    return await buscar_ibovespa()
 
 
 @router.get("/mercado/cambio")
-def cambio():
-    return {"usd_brl": buscar_cambio_usd_brl()}
+async def cambio():
+    return {"usd_brl": await buscar_cambio_usd_brl()}
 
 
 @router.get("/history/{ticker}")

@@ -1,10 +1,11 @@
-import requests
+import asyncio
+import httpx
+from datetime import datetime, timedelta
 import time
-from datetime import datetime
 
 BACEN_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs"
 
-# Cache in-memory para dados macro — TTL 6h (Selic/IPCA mudam mensalmente, Focus semanalmente)
+# Cache in-memory para dados macro — TTL 6h
 _MACRO_TTL = 6 * 3600
 _macro_cache: dict = {"resultado": None, "ts": 0.0}
 
@@ -18,30 +19,27 @@ def _cache_macro_valido() -> bool:
         and (time.monotonic() - _macro_cache["ts"]) < _MACRO_TTL
     )
 
-def buscar_selic() -> float:
-    """Busca taxa Selic meta atual (% ao ano)."""
+async def buscar_selic() -> float:
     try:
-        # Série 432 = Selic meta definida pelo Copom (% a.a.)
         url = f"{BACEN_URL}.432/dados/ultimos/1?formato=json"
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        return float(data[0]["valor"])
+        async with httpx.AsyncClient() as client:
+            r = await client.get(url, timeout=10)
+            data = r.json()
+            return float(data[0]["valor"])
     except:
         return 13.75
 
-def buscar_ipca_12m() -> float:
-    """Busca IPCA acumulado 12 meses."""
+async def buscar_ipca_12m() -> float:
     try:
-        # Série 13522 = IPCA acumulado 12 meses
         url = f"{BACEN_URL}.13522/dados/ultimos/1?formato=json"
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        return float(data[0]["valor"])
+        async with httpx.AsyncClient() as client:
+            r = await client.get(url, timeout=10)
+            data = r.json()
+            return float(data[0]["valor"])
     except:
         return 5.0
 
-def buscar_focus_selic() -> float | None:
-    """Busca expectativa de Selic do Focus para fim do ano."""
+async def buscar_focus_selic() -> float | None:
     try:
         url = "https://olinda.bcb.gov.br/olinda/servico/Expectativas/versao/v1/odata/ExpectativaMercadoAnuais"
         params = {
@@ -51,21 +49,25 @@ def buscar_focus_selic() -> float | None:
             "$format": "json",
             "$select": "Indicador,Data,Mediana,DataReferencia"
         }
-        r = requests.get(url, params=params, timeout=10)
-        data = r.json()
-        if data.get("value"):
-            return float(data["value"][0]["Mediana"])
+        async with httpx.AsyncClient() as client:
+            r = await client.get(url, params=params, timeout=10)
+            data = r.json()
+            if data.get("value"):
+                return float(data["value"][0]["Mediana"])
         return None
     except:
         return None
 
-def calcular_regime_macro(forcar: bool = False) -> dict:
+async def calcular_regime_macro(forcar: bool = False) -> dict:
     if not forcar and _cache_macro_valido():
         return {**_macro_cache["resultado"], "cache": True}
 
-    selic = buscar_selic()
-    ipca = buscar_ipca_12m()
-    selic_esperada = buscar_focus_selic()
+    # Parallelize macro fetches
+    selic_task = buscar_selic()
+    ipca_task = buscar_ipca_12m()
+    focus_task = buscar_focus_selic()
+    
+    selic, ipca, selic_esperada = await asyncio.gather(selic_task, ipca_task, focus_task)
 
     detalhes = {
         "selic_atual": selic,
@@ -76,7 +78,6 @@ def calcular_regime_macro(forcar: bool = False) -> dict:
 
     pontos_regime = 0
 
-    # Selic alta = defensivo
     if selic > 13:
         pontos_regime -= 2
     elif selic > 11:
@@ -86,7 +87,6 @@ def calcular_regime_macro(forcar: bool = False) -> dict:
     else:
         pontos_regime += 1
 
-    # Focus: queda esperada = antecipa ciclo positivo
     if selic_esperada:
         variacao = selic_esperada - selic
         if variacao < -1.5:
@@ -96,7 +96,6 @@ def calcular_regime_macro(forcar: bool = False) -> dict:
         elif variacao > 0.5:
             pontos_regime -= 1
 
-    # IPCA
     if ipca < 4:
         pontos_regime += 1
     elif ipca > 6:
@@ -140,9 +139,9 @@ def calcular_regime_macro(forcar: bool = False) -> dict:
     _macro_cache["ts"] = time.monotonic()
     return resultado
 
-def get_score_macro(classe: str, macro_info: dict = None) -> float:
+async def get_score_macro(classe: str, macro_info: dict = None) -> float:
     if macro_info is None:
-        macro_info = calcular_regime_macro()
+        macro_info = await calcular_regime_macro()
     scores = macro_info.get("scores_por_classe", {})
     mapa = {
         "ACAO": "ACAO", "FII": "FII_TIJOLO",
@@ -150,15 +149,3 @@ def get_score_macro(classe: str, macro_info: dict = None) -> float:
         "TESOURO": "TESOURO_IPCA", "CDB": "CDB",
     }
     return scores.get(mapa.get(classe, "ACAO"), 5.0)
-
-if __name__ == "__main__":
-    print("Testando Score Macro...\n")
-    macro = calcular_regime_macro()
-    print(f"Regime:              {macro['regime']}")
-    print(f"Selic atual:         {macro['detalhes']['selic_atual']}% a.a.")
-    print(f"IPCA 12m:            {macro['detalhes']['ipca_12m']}%")
-    print(f"Juro Real:           {macro['detalhes']['juro_real']}%")
-    print(f"Focus Selic 2026:    {macro['detalhes']['focus_selic_esperada']}%")
-    print(f"\nScores por classe:")
-    for classe, score in macro['scores_por_classe'].items():
-        print(f"  {classe}: {score}")

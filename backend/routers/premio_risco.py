@@ -13,8 +13,8 @@ _ORDEM_SINAL = {"ATRATIVO": 0, "NEUTRO": 1, "ABAIXO_CDI": 2,
 
 
 @router.get("/premio-risco")
-def premio_risco(db: Session = Depends(get_db)):
-    macro  = calcular_regime_macro()
+async def premio_risco(db: Session = Depends(get_db)):
+    macro  = await calcular_regime_macro()
     selic  = macro["detalhes"]["selic_atual"]
     ipca   = macro["detalhes"]["ipca_12m"]
     cdi    = round(selic - 0.1, 2)

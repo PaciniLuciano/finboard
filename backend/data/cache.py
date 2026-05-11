@@ -67,7 +67,7 @@ def salvar_cache(ticker: str, dados: dict):
     except:
         pass
 
-def buscar_preco_com_cache(ticker: str, mercado: str = "BR") -> dict:
+async def buscar_preco_com_cache(ticker: str, mercado: str = "BR") -> dict:
     """
     Busca preço com cache:
     1. Verifica cache (TTL 15 min)
@@ -79,7 +79,7 @@ def buscar_preco_com_cache(ticker: str, mercado: str = "BR") -> dict:
         return cached
 
     # Cache miss — busca na API
-    dados = buscar_preco_api(ticker, mercado)
+    dados = await buscar_preco_api(ticker, mercado)
 
     # Salva no cache se OK
     if "erro" not in dados and dados.get("preco"):
@@ -110,15 +110,3 @@ def invalidar_cache(ticker: str = None):
         conn.close()
     except:
         pass
-
-
-
-
-if __name__ == "__main__":
-    print("Testando cache...\n")
-    print("1a chamada:")
-    r = buscar_preco_com_cache("PETR4")
-    print(f"  PETR4: R$ " + str(r.get("preco")) + " - fonte: " + str(r.get("fonte")))
-    print("\n2a chamada (cache):")
-    r = buscar_preco_com_cache("PETR4")
-    print(f"  Cache: " + str(r.get("cache", False)))

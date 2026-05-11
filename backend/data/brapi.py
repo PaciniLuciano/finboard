@@ -1,11 +1,12 @@
 import yfinance as yf
-import requests
+import httpx
 import os
 import urllib3
+import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Desabilita avisos de conexão insegura (necessário ao usar verify=False)
+# Desabilita avisos de conexão insegura
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 load_dotenv()
@@ -14,13 +15,13 @@ BRAPI_URL = "https://brapi.dev/api"
 
 # ── BRAPI (ETFs BR) ───────────────────────────────────────
 
-def buscar_preco_brapi(ticker: str) -> dict:
+async def buscar_preco_brapi(ticker: str) -> dict:
     """Busca preço via brapi.dev — usado para ETFs BR."""
     try:
         url = f"{BRAPI_URL}/quote/{ticker}?token={BRAPI_TOKEN}"
-        # verify=False ignora erro de certificado SSL da rede corporativa
-        response = requests.get(url, timeout=10, verify=False)
-        data = response.json()
+        async with httpx.AsyncClient(verify=False) as client:
+            response = await client.get(url, timeout=10)
+            data = response.json()
 
         if "results" not in data or not data["results"]:
             return {"erro": f"Ticker {ticker} não encontrado no brapi"}
@@ -41,17 +42,16 @@ def buscar_preco_brapi(ticker: str) -> dict:
 
 # ── YFINANCE (Ações, FIIs, ETFs EUA) ─────────────────────
 
-def buscar_preco_yfinance(ticker: str, mercado: str = "BR") -> dict:
+async def buscar_preco_yfinance(ticker: str, mercado: str = "BR") -> dict:
     """Busca preço via yfinance."""
     try:
         ticker_yf = f"{ticker}.SA" if mercado == "BR" else ticker
         
-        # Configura sessão para ignorar SSL no yfinance
-        session = requests.Session()
-        session.verify = False
+        loop = asyncio.get_event_loop()
+        ativo = yf.Ticker(ticker_yf)
         
-        ativo = yf.Ticker(ticker_yf, session=session)
-        info = ativo.info
+        # yfinance doesn't have an async API for info, running in executor
+        info = await loop.run_in_executor(None, getattr, ativo, "info")
 
         preco = (
             info.get("regularMarketPrice") or
@@ -79,47 +79,50 @@ def buscar_preco_yfinance(ticker: str, mercado: str = "BR") -> dict:
 ETFs_BR = ["BOVA11", "IVVB11", "SMAL11", "HASH11", "XFIX11",
            "DIVO11", "ECOO11", "FIND11", "GOLD11", "MATB11"]
 
-def buscar_preco(ticker: str, mercado: str = "BR") -> dict:
+async def buscar_preco(ticker: str, mercado: str = "BR") -> dict:
     """
     Roteador inteligente:
     - ETFs BR → brapi
     - Ações, FIIs, ETFs EUA → yfinance
     """
     if mercado == "EUA":
-        return buscar_preco_yfinance(ticker, mercado="EUA")
+        return await buscar_preco_yfinance(ticker, mercado="EUA")
 
     if ticker in ETFs_BR:
-        resultado = buscar_preco_brapi(ticker)
+        resultado = await buscar_preco_brapi(ticker)
         if "erro" not in resultado:
             return resultado
         # fallback para yfinance se brapi falhar
-        return buscar_preco_yfinance(ticker, mercado="BR")
+        return await buscar_preco_yfinance(ticker, mercado="BR")
 
     # Ações e FIIs → yfinance
-    resultado = buscar_preco_yfinance(ticker, mercado="BR")
+    resultado = await buscar_preco_yfinance(ticker, mercado="BR")
     if "erro" not in resultado:
         return resultado
     # fallback para brapi
-    return buscar_preco_brapi(ticker)
+    return await buscar_preco_brapi(ticker)
 
-def buscar_multiplos(tickers: list, mercado: str = "BR") -> list:
-    """Busca preços de múltiplos tickers."""
-    return [buscar_preco(t, mercado) for t in tickers]
+async def buscar_multiplos(tickers: list, mercado: str = "BR") -> list:
+    """Busca preços de múltiplos tickers em paralelo."""
+    tasks = [buscar_preco(t, mercado) for t in tickers]
+    return await asyncio.gather(*tasks)
 
-def buscar_cambio_usd_brl() -> float:
+async def buscar_cambio_usd_brl() -> float:
     """Busca câmbio USD/BRL atual."""
     try:
+        loop = asyncio.get_event_loop()
         cambio = yf.Ticker("USDBRL=X")
-        info = cambio.info
+        info = await loop.run_in_executor(None, getattr, cambio, "info")
         return info.get("regularMarketPrice") or info.get("previousClose") or 0.0
     except:
         return 0.0
 
-def buscar_ibovespa() -> dict:
+async def buscar_ibovespa() -> dict:
     """Busca dados do Ibovespa."""
     try:
+        loop = asyncio.get_event_loop()
         ibov = yf.Ticker("^BVSP")
-        info = ibov.info
+        info = await loop.run_in_executor(None, getattr, ibov, "info")
         return {
             "ticker": "IBOV",
             "preco": info.get("regularMarketPrice") or info.get("previousClose") or 0.0,
@@ -135,33 +138,3 @@ def buscar_ibovespa() -> dict:
             "erro": str(e),
             "atualizado_em": datetime.now().isoformat()
         }
-
-if __name__ == "__main__":
-    print("Testando fontes de dados...\n")
-
-    print("=== AÇÕES (yfinance) ===")
-    for ticker in ["PETR4", "VALE3", "ITUB4"]:
-        r = buscar_preco(ticker)
-        print(f"{ticker}: R$ {r.get('preco')} ({r.get('variacao_dia')}%) [{r.get('fonte')}]")
-
-    print("\n=== FIIs (yfinance) ===")
-    for ticker in ["HGLG11", "MXRF11"]:
-        r = buscar_preco(ticker)
-        print(f"{ticker}: R$ {r.get('preco')} ({r.get('variacao_dia')}%) [{r.get('fonte')}]")
-
-    print("\n=== ETFs BR (brapi) ===")
-    for ticker in ["BOVA11", "IVVB11"]:
-        r = buscar_preco(ticker)
-        print(f"{ticker}: R$ {r.get('preco')} ({r.get('variacao_dia')}%) [{r.get('fonte')}]")
-
-    print("\n=== ETFs EUA (yfinance) ===")
-    for ticker in ["VOO", "QQQ"]:
-        r = buscar_preco(ticker, mercado="EUA")
-        print(f"{ticker}: US$ {r.get('preco')} ({r.get('variacao_dia')}%) [{r.get('fonte')}]")
-
-    print("\n=== CÂMBIO ===")
-    print(f"USD/BRL: R$ {buscar_cambio_usd_brl()}")
-
-    print("\n=== IBOVESPA ===")
-    ibov = buscar_ibovespa()
-    print(f"IBOV: {ibov.get('preco')} ({ibov.get('variacao_dia')}%)")
