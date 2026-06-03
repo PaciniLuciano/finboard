@@ -1,3 +1,5 @@
+import backend.ssl_patch  # noqa: F401 — must be first, patches curl_cffi before yfinance loads
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
