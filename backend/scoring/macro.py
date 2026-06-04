@@ -1,9 +1,40 @@
 import asyncio
+import logging
 import httpx
 from datetime import datetime, timedelta
 import time
 
+logger = logging.getLogger(__name__)
+
 BACEN_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs"
+
+# Ajuste de score macro por setor — modificador somado ao score base da classe
+AJUSTE_SETOR = {
+    "BANCO":       {"DEFENSIVO":  1.5, "NEUTRO":  0.5, "AGRESSIVO": -1.0},
+    "SEGURO":      {"DEFENSIVO":  1.0, "NEUTRO":  0.5, "AGRESSIVO": -0.5},
+    "VAREJO":      {"DEFENSIVO": -1.5, "NEUTRO": -0.5, "AGRESSIVO":  1.5},
+    "CONSTRUTORA": {"DEFENSIVO": -1.5, "NEUTRO": -0.5, "AGRESSIVO":  1.5},
+    "TECH":        {"DEFENSIVO": -1.0, "NEUTRO":  0.0, "AGRESSIVO":  1.0},
+    "COMMODITY":   {"DEFENSIVO":  0.0, "NEUTRO":  0.5, "AGRESSIVO":  0.5},
+    "FII_PAPEL":   {"DEFENSIVO":  1.5, "NEUTRO":  0.5, "AGRESSIVO": -1.0},
+}
+
+TICKER_SETOR = {
+    "ITUB": "BANCO",  "BBDC": "BANCO",  "SANB": "BANCO",
+    "BBAS": "BANCO",  "BPAC": "BANCO",  "ABCB": "BANCO",
+    "MGLU": "VAREJO", "VIIA": "VAREJO", "AMER": "VAREJO",
+    "LREN": "VAREJO", "ALPA": "VAREJO", "SOMA": "VAREJO",
+    "CYRE": "CONSTRUTORA", "MRVE": "CONSTRUTORA", "EZTC": "CONSTRUTORA",
+    "DIRR": "CONSTRUTORA", "EVEN": "CONSTRUTORA", "LAVV": "CONSTRUTORA",
+    "PETR": "COMMODITY", "VALE": "COMMODITY", "CSNA": "COMMODITY",
+    "GGBR": "COMMODITY", "USIM": "COMMODITY", "BRAP": "COMMODITY",
+    "BBSE": "SEGURO",  "PSSA": "SEGURO",  "EGIE": "SEGURO",
+    "MXRF": "FII_PAPEL", "KNCR": "FII_PAPEL", "IRDM": "FII_PAPEL",
+    "RECR": "FII_PAPEL", "BCFF": "FII_PAPEL",
+}
+
+def detectar_setor(ticker: str) -> str | None:
+    return TICKER_SETOR.get(ticker[:4].upper())
 
 # Cache in-memory para dados macro — TTL 6h
 _MACRO_TTL = 6 * 3600
@@ -40,34 +71,39 @@ async def buscar_ipca_12m() -> float:
         return 5.0
 
 async def buscar_focus_selic() -> float | None:
-    try:
-        url = "https://olinda.bcb.gov.br/olinda/servico/Expectativas/versao/v1/odata/ExpectativaMercadoAnuais"
-        params = {
-            "$filter": "Indicador eq 'Selic' and DataReferencia eq '2026'",
-            "$orderby": "Data desc",
-            "$top": 1,
-            "$format": "json",
-            "$select": "Indicador,Data,Mediana,DataReferencia"
-        }
-        async with httpx.AsyncClient() as client:
-            r = await client.get(url, params=params, timeout=10)
-            data = r.json()
-            if data.get("value"):
-                return float(data["value"][0]["Mediana"])
-        return None
-    except:
-        return None
+    ano_atual = datetime.now().year
+    base = "https://olinda.bcb.gov.br/olinda/servico/Expectativas/versao/v1/odata/ExpectativasMercadoAnuais"
+    for ano in [ano_atual + 1, ano_atual]:
+        try:
+            # $ deve ser literal na URL — httpx codifica $ como %24 no dict de params,
+            # o que o servidor Bacen/Olinda rejeita com HTTP 400
+            url = (
+                f"{base}?$filter=Indicador eq 'Selic' and DataReferencia eq '{ano}'"
+                f"&$orderby=Data desc&$top=1&$format=json"
+                f"&$select=Indicador,Data,Mediana,DataReferencia"
+            )
+            async with httpx.AsyncClient(verify=False, timeout=15, follow_redirects=True) as client:
+                r = await client.get(url)
+                if r.status_code != 200:
+                    logger.error("Focus Selic %s: HTTP %s", ano, r.status_code)
+                    continue
+                data = r.json()
+                if data.get("value"):
+                    valor = float(data["value"][0]["Mediana"])
+                    logger.info("Focus Selic %s: %.2f%%", ano, valor)
+                    return valor
+            logger.info("Focus Selic %s: resposta vazia, tentando ano anterior", ano)
+        except Exception as e:
+            logger.error("Erro ao buscar Focus Selic %s: %s", ano, e)
+    return None
 
 async def calcular_regime_macro(forcar: bool = False) -> dict:
     if not forcar and _cache_macro_valido():
         return {**_macro_cache["resultado"], "cache": True}
 
-    # Parallelize macro fetches
-    selic_task = buscar_selic()
-    ipca_task = buscar_ipca_12m()
-    focus_task = buscar_focus_selic()
-    
-    selic, ipca, selic_esperada = await asyncio.gather(selic_task, ipca_task, focus_task)
+    selic, ipca, selic_esperada = await asyncio.gather(
+        buscar_selic(), buscar_ipca_12m(), buscar_focus_selic()
+    )
 
     detalhes = {
         "selic_atual": selic,
@@ -139,13 +175,21 @@ async def calcular_regime_macro(forcar: bool = False) -> dict:
     _macro_cache["ts"] = time.monotonic()
     return resultado
 
-async def get_score_macro(classe: str, macro_info: dict = None) -> float:
+async def get_score_macro(classe: str, macro_info: dict = None, ticker: str = "") -> float:
     if macro_info is None:
         macro_info = await calcular_regime_macro()
     scores = macro_info.get("scores_por_classe", {})
+    regime = macro_info.get("regime", "NEUTRO")
     mapa = {
         "ACAO": "ACAO", "FII": "FII_TIJOLO",
         "ETF_BR": "ETF_BR", "ETF_EUA": "ETF_EUA",
         "TESOURO": "TESOURO_IPCA", "CDB": "CDB",
     }
-    return scores.get(mapa.get(classe, "ACAO"), 5.0)
+    score_base = scores.get(mapa.get(classe, "ACAO"), 5.0)
+
+    setor = detectar_setor(ticker) if ticker else None
+    if setor and setor in AJUSTE_SETOR:
+        ajuste = AJUSTE_SETOR[setor].get(regime, 0.0)
+        score_base = round(min(10.0, max(0.0, score_base + ajuste)), 1)
+
+    return score_base

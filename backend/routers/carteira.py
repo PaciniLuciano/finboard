@@ -25,11 +25,21 @@ async def resumo_carteira(db: Session = Depends(get_db)):
         p_atual = res.get("preco") or a.preco_medio or 0
         qtd = a.quantidade or 0
         pm = a.preco_medio or 0
+
+        em_dolar = (a.moeda == "USD") or (a.mercado == "EUA")
+
+        # preco_medio sempre no campo moeda do cadastro — converte se for USD
         v_invest = pm * qtd
+        if em_dolar:
+            v_invest *= cambio
+
+        # preco_atual: se mercado == "EUA" a API já retorna em USD, converte
+        # se mercado == "BR" mas moeda == "USD" (cadastro errado), o preco_medio
+        # já foi corrigido acima; preco_atual da API BR já é BRL, não converte
         v_atual = p_atual * qtd
         if a.mercado == "EUA":
-            v_invest *= cambio
             v_atual *= cambio
+
         return v_invest, v_atual, a.classe or "OUTROS"
 
     resultados = await asyncio.gather(*[get_ativo_valor(a) for a in ativos])

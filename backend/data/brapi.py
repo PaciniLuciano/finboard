@@ -47,7 +47,7 @@ async def buscar_preco_yfinance(ticker: str, mercado: str = "BR") -> dict:
     try:
         ticker_yf = f"{ticker}.SA" if mercado == "BR" else ticker
         
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         ativo = yf.Ticker(ticker_yf)
         
         # yfinance doesn't have an async API for info, running in executor
@@ -110,7 +110,7 @@ async def buscar_multiplos(tickers: list, mercado: str = "BR") -> list:
 async def buscar_cambio_usd_brl() -> float:
     """Busca câmbio USD/BRL atual."""
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         cambio = yf.Ticker("USDBRL=X")
         info = await loop.run_in_executor(None, getattr, cambio, "info")
         return info.get("regularMarketPrice") or info.get("previousClose") or 0.0
@@ -120,7 +120,7 @@ async def buscar_cambio_usd_brl() -> float:
 async def buscar_ibovespa() -> dict:
     """Busca dados do Ibovespa."""
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         ibov = yf.Ticker("^BVSP")
         info = await loop.run_in_executor(None, getattr, ibov, "info")
         return {

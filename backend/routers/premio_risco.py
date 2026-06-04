@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor
+import asyncio
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -14,30 +14,28 @@ _ORDEM_SINAL = {"ATRATIVO": 0, "NEUTRO": 1, "ABAIXO_CDI": 2,
 
 @router.get("/premio-risco")
 async def premio_risco(db: Session = Depends(get_db)):
-    macro  = await calcular_regime_macro()
-    selic  = macro["detalhes"]["selic_atual"]
-    ipca   = macro["detalhes"]["ipca_12m"]
-    cdi    = round(selic - 0.1, 2)
+    macro = await calcular_regime_macro()
+    selic = macro["detalhes"]["selic_atual"]
+    ipca  = macro["detalhes"]["ipca_12m"]
+    cdi   = round(selic - 0.1, 2)
 
     ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
 
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        futures = [
-            pool.submit(calcular_premio, a.ticker, a.classe, a.mercado, cdi)
-            for a in ativos
-        ]
-        resultados = [f.result() for f in futures]
+    resultados_raw = await asyncio.gather(
+        *[calcular_premio(a.ticker, a.classe, a.mercado, cdi) for a in ativos],
+        return_exceptions=True
+    )
+    resultados = [r for r in resultados_raw if not isinstance(r, Exception)]
 
-    # Renda Fixa — yield calculado diretamente da taxa cadastrada
     for rf in db.query(RendaFixa).filter(RendaFixa.ativo == True).all():
         if rf.indexador == "CDI":
-            yield_ef = round(rf.taxa_pct / 100 * cdi, 2)
+            yield_ef  = round(rf.taxa_pct / 100 * cdi, 2)
             yield_tipo = f"CDI × {rf.taxa_pct}%"
         elif rf.indexador == "IPCA":
-            yield_ef = round(rf.taxa_pct + ipca, 2)
+            yield_ef  = round(rf.taxa_pct + ipca, 2)
             yield_tipo = f"IPCA + {rf.taxa_pct}%"
         else:
-            yield_ef = rf.taxa_pct
+            yield_ef  = rf.taxa_pct
             yield_tipo = "prefixado"
 
         premio_cdi = round(yield_ef - cdi, 2)

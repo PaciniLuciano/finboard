@@ -20,6 +20,7 @@ async function carregarCarteira() {
       const retSinal = a.retorno_pct >= 0 ? '+' : '';
       const classePill = {ACAO:'p-gray',FII:'p-gold',ETF_BR:'p-blue',ETF_EUA:'p-green',TESOURO:'p-blue',FUNDO_INVEST:'p-gray'}[a.classe] || 'p-gray';
       const nome = (a.nome || '').replace(/'/g, "\\'");
+      const dataCompra = a.data_compra || '';
 
       const btnPreco = a.classe === 'FUNDO_INVEST' ? `
         <button onclick="abrirPrecoManual('${a.ticker}', ${a.preco_atual})"
@@ -43,6 +44,8 @@ async function carregarCarteira() {
               style="padding:3px 8px;font-size:10px;background:#1E6E3A;color:white;border:none;border-radius:4px;cursor:pointer;">+Compra</button>
             <button onclick="abrirVenda('${a.ticker}','${nome}',${a.quantidade},${a.preco_medio},${a.preco_atual})"
               style="padding:3px 8px;font-size:10px;background:#C8860A;color:white;border:none;border-radius:4px;cursor:pointer;">-Venda</button>
+            <button onclick="abrirEdicao('${a.ticker}','${nome}','${a.classe}','${a.mercado}',${a.quantidade},${a.preco_medio},'${a.moeda}','${dataCompra}')"
+              style="padding:3px 8px;font-size:10px;background:#1A5C8A;color:white;border:none;border-radius:4px;cursor:pointer;">✎ Editar</button>
             <button onclick="excluirAtivo('${a.ticker}')"
               style="padding:3px 8px;font-size:10px;background:#8B1A1A;color:white;border:none;border-radius:4px;cursor:pointer;">✕</button>
           </div>
@@ -179,6 +182,48 @@ function abrirPrecoManual(ticker, precoAtual) {
   document.getElementById('modal-preco-ticker').textContent = `${ticker} · Preço atual: R$ ${precoAtual}`;
   document.getElementById('preco-novo-valor').value = precoAtual;
   document.getElementById('modal-preco').style.display = 'flex';
+}
+
+function abrirEdicao(ticker, nome, classe, mercado, quantidade, precoMedio, moeda, dataCompra) {
+  ativoSelecionado = { ticker };
+  document.getElementById('edit-ticker-titulo').textContent = ticker;
+  document.getElementById('edit-nome').value = nome;
+  document.getElementById('edit-classe').value = classe;
+  document.getElementById('edit-mercado').value = mercado;
+  document.getElementById('edit-quantidade').value = quantidade;
+  document.getElementById('edit-preco-medio').value = precoMedio;
+  document.getElementById('edit-moeda').value = moeda;
+  document.getElementById('edit-data-compra').value = dataCompra;
+  document.getElementById('modal-editar').style.display = 'flex';
+}
+
+async function confirmarEdicao() {
+  const ticker = ativoSelecionado.ticker;
+  const body = {
+    nome:        document.getElementById('edit-nome').value || null,
+    classe:      document.getElementById('edit-classe').value || null,
+    mercado:     document.getElementById('edit-mercado').value || null,
+    quantidade:  parseFloat(document.getElementById('edit-quantidade').value) || null,
+    preco_medio: parseFloat(document.getElementById('edit-preco-medio').value) || null,
+    moeda:       document.getElementById('edit-moeda').value || null,
+    data_compra: document.getElementById('edit-data-compra').value || null,
+  };
+  try {
+    const res = await fetch(`/ativos/${ticker}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (res.ok) {
+      fecharModal('modal-editar');
+      document.getElementById('msg-carteira').innerHTML =
+        `<div class="alert alert-green">✓ ${data.mensagem}</div>`;
+      carregarCarteira();
+    } else {
+      alert(data.detail || 'Erro ao editar ativo.');
+    }
+  } catch(e) { alert('Erro ao editar ativo.'); }
 }
 
 async function confirmarPrecoManual() {

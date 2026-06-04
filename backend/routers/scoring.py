@@ -34,6 +34,8 @@ def invalidar_macro():
     return {"mensagem": "Cache macro invalidado"}
 
 
+
+
 @router.get("/radar")
 async def radar(origem: str = "carteira", forcar: bool = False, db: Session = Depends(get_db)):
     from backend.scorer_job import atualizar_scores

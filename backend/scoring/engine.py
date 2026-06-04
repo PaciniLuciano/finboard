@@ -1,8 +1,11 @@
 import asyncio
+import logging
 from backend.scoring.momento import calcular_momento
 from backend.scoring.valuation import calcular_valuation
 from backend.scoring.macro import calcular_regime_macro, get_score_macro
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 PESOS_PADRAO = {
     "valuation": 0.40,
@@ -14,21 +17,22 @@ async def calcular_score_final(ticker: str, classe: str = "ACAO", mercado: str =
     if pesos is None:
         pesos = PESOS_PADRAO
 
-    print(f"  Calculando scores para {ticker}...")
+    logger.info("Calculando scores para %s", ticker)
 
     if macro_info is None:
         macro_info = await calcular_regime_macro()
 
-    # Parallelize valuation and moment calculations
-    val_task = calcular_valuation(ticker, classe, mercado)
-    mom_task = calcular_momento(ticker, mercado)
-    
-    s_valuation, s_momento = await asyncio.gather(val_task, mom_task)
+    s_valuation, s_momento = await asyncio.gather(
+        calcular_valuation(ticker, classe, mercado),
+        calcular_momento(ticker, mercado)
+    )
 
-    s_macro = await get_score_macro(classe, macro_info)
+    s_macro = await get_score_macro(classe, macro_info, ticker=ticker)
 
-    v   = s_valuation.get("score_valuation") or 5.0
-    m   = s_momento.get("score_momento") or 5.0
+    v = s_valuation.get("score_valuation")
+    v = v if v is not None else 5.0
+    m = s_momento.get("score_momento")
+    m = m if m is not None else 5.0
     mac = s_macro
 
     score_final = round(
@@ -58,33 +62,28 @@ async def calcular_scores_carteira(ativos: list, pesos: dict = None) -> list:
     if not ativos:
         return []
 
-    # Macro calculado UMA vez para todos os tickers
     macro_info = await calcular_regime_macro()
 
-    # Calculate all scores in parallel
-    tasks = [
-        calcular_score_final(
-            ativo["ticker"],
-            ativo.get("classe", "ACAO"),
-            ativo.get("mercado", "BR"),
-            pesos,
-            macro_info
-        ) for ativo in ativos
-    ]
-    
-    # We can use a semaphore if we want to limit concurrency
-    # sem = asyncio.Semaphore(10)
-    # async def sem_task(task):
-    #     async with sem:
-    #         return await task
-    # resultados = await asyncio.gather(*[sem_task(t) for t in tasks], return_exceptions=True)
-    
-    resultados_raw = await asyncio.gather(*tasks, return_exceptions=True)
-    
+    sem = asyncio.Semaphore(8)
+
+    async def sem_task(ativo):
+        async with sem:
+            return await calcular_score_final(
+                ativo["ticker"],
+                ativo.get("classe", "ACAO"),
+                ativo.get("mercado", "BR"),
+                pesos,
+                macro_info
+            )
+
+    resultados_raw = await asyncio.gather(
+        *[sem_task(a) for a in ativos], return_exceptions=True
+    )
+
     resultados = []
     for i, res in enumerate(resultados_raw):
         if isinstance(res, Exception):
-            print(f"Erro em {ativos[i]['ticker']}: {res}")
+            logger.error("Erro em %s: %s", ativos[i]["ticker"], res)
         else:
             resultados.append(res)
 

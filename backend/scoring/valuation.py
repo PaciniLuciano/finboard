@@ -2,19 +2,12 @@ import asyncio
 import yfinance as yf
 from datetime import datetime
 from backend.scoring.utils import normalizar_dy
-from functools import partial
-
 async def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "BR") -> dict:
     try:
         ticker_yf = f"{ticker}.SA" if mercado == "BR" else ticker
-        
-        # yfinance info is a property that triggers a fetch, but doesn't have an async API.
-        # We run it in a thread to avoid blocking the event loop.
-        loop = asyncio.get_event_loop()
-        ativo = yf.Ticker(ticker_yf)
-        
-        # info might be cached in the Ticker object, but the first call is slow.
-        info = await loop.run_in_executor(None, getattr, ativo, "info")
+
+        loop = asyncio.get_running_loop()
+        info = await loop.run_in_executor(None, lambda: yf.Ticker(ticker_yf).info)
 
         pontos = 0
         detalhes = {}
@@ -40,8 +33,13 @@ async def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "
             if dy:
                 dy_pct = normalizar_dy(dy)
                 detalhes["dy"] = round(dy_pct, 2)
-                if dy_pct > 8: pontos += 2
-                elif dy_pct > 4: pontos += 1
+                # DY > 15% provavelmente é distorção, não pontua no máximo
+                if 6 < dy_pct <= 15:
+                    pontos += 2
+                elif 3 < dy_pct <= 6:
+                    pontos += 1
+                elif dy_pct > 15:
+                    pontos += 1  # pontua pouco — dado suspeito
 
             roe = info.get("returnOnEquity")
             if roe:

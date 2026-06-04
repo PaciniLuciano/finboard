@@ -29,7 +29,7 @@ async def atualizar_scores():
                 continue
             scores = await calcular_scores_carteira(lista_ativos)
             # Apaga cache anterior dessa origem
-            db.execute(text(f"DELETE FROM scores_cache WHERE origem='{origem}'"))
+            db.execute(text("DELETE FROM scores_cache WHERE origem=:origem"), {"origem": origem})
             for s in scores:
                 db.add(ScoreCache(
                     ticker=s["ticker"],

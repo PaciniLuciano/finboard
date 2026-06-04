@@ -1,3 +1,4 @@
+import asyncio
 import time
 import yfinance as yf
 from backend.scoring.utils import normalizar_dy
@@ -5,7 +6,6 @@ from backend.scoring.utils import normalizar_dy
 _CACHE_TTL = 30 * 60
 _cache: dict = {}
 
-# Prêmio mínimo exigido acima do CDI por classe de ativo
 PREMIO_MINIMO = {
     "ACAO":         8.5,
     "FII":          3.0,
@@ -16,20 +16,19 @@ PREMIO_MINIMO = {
 }
 
 
-def calcular_premio(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
+async def calcular_premio(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
     chave = (ticker.upper(), classe, mercado)
     cached = _cache.get(chave)
     if cached and (time.monotonic() - cached["ts"]) < _CACHE_TTL:
         return {**cached["data"], "cache": True}
 
-    resultado = _calcular(ticker, classe, mercado, cdi)
-    # Não cacheia erros — permite retry na próxima chamada
+    resultado = await _calcular(ticker, classe, mercado, cdi)
     if resultado["sinal"] != "ERRO":
         _cache[chave] = {"data": resultado, "ts": time.monotonic()}
     return resultado
 
 
-def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
+async def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
     premio_minimo = PREMIO_MINIMO.get(classe)
     benchmark = round(cdi + premio_minimo, 2) if premio_minimo is not None else None
     base = {
@@ -47,10 +46,10 @@ def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
 
     try:
         ticker_yf = f"{ticker.upper()}.SA" if mercado == "BR" else ticker.upper()
-        info = yf.Ticker(ticker_yf).info
+        loop = asyncio.get_running_loop()
+        info = await loop.run_in_executor(None, lambda: yf.Ticker(ticker_yf).info)
 
         pe_raw = info.get("trailingPE") or info.get("forwardPE")
-
         pe = float(pe_raw) if pe_raw else None
         dy = normalizar_dy(info.get("dividendYield"))
 

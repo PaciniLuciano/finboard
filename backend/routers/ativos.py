@@ -7,6 +7,7 @@ import asyncio
 
 from backend.database import get_db, Ativo
 from backend.data.cache import buscar_preco_com_cache as buscar_preco, salvar_cache
+from backend.data.brapi import buscar_cambio_usd_brl
 
 router = APIRouter()
 
@@ -32,6 +33,16 @@ class Venda(BaseModel):
     ticker: str
     quantidade: float
     preco: float
+
+
+class AtivoUpdate(BaseModel):
+    nome: Optional[str] = None
+    classe: Optional[str] = None
+    mercado: Optional[str] = None
+    quantidade: Optional[float] = None
+    preco_medio: Optional[float] = None
+    moeda: Optional[str] = None
+    data_compra: Optional[date] = None
 
 
 @router.post("/ativos")
@@ -70,18 +81,27 @@ def cadastrar_ativo(ativo: AtivoCreate, db: Session = Depends(get_db)):
 @router.get("/ativos")
 async def listar_ativos(db: Session = Depends(get_db)):
     ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
-    
+    cambio = await buscar_cambio_usd_brl() or 5.0
+
     async def get_ativo_info(a):
         preco_atual = await buscar_preco(a.ticker, a.mercado)
-        preco = preco_atual.get("preco") or 0
-        if a.classe == "FUNDO_INVEST" and preco == 0:
-            preco = a.preco_medio or 0
+        preco_usd = preco_atual.get("preco") or 0
+        if a.classe == "FUNDO_INVEST" and preco_usd == 0:
+            preco_usd = a.preco_medio or 0
         variacao = preco_atual.get("variacao_dia") or 0
         qtd = a.quantidade or 0
         pm = a.preco_medio or 0
-        valor_atual = preco * qtd
-        valor_investido = pm * qtd
-        retorno_pct = ((preco - pm) / pm * 100) if pm > 0 else 0
+
+        em_dolar = (a.moeda == "USD") or (a.mercado == "EUA")
+
+        # Converte preços unitários para BRL para exibição e cálculo de valores
+        preco_atual_brl = preco_usd * cambio if a.mercado == "EUA" else preco_usd
+        pm_brl = pm * cambio if em_dolar else pm
+
+        valor_investido = pm_brl * qtd
+        valor_atual = preco_atual_brl * qtd
+        retorno_pct = ((preco_usd - pm) / pm * 100) if pm > 0 else 0
+
         return {
             "id": a.id,
             "ticker": a.ticker,
@@ -89,14 +109,15 @@ async def listar_ativos(db: Session = Depends(get_db)):
             "classe": a.classe,
             "mercado": a.mercado,
             "quantidade": a.quantidade,
-            "preco_medio": a.preco_medio,
-            "preco_atual": preco,
+            "preco_medio": round(pm_brl, 2),
+            "preco_atual": round(preco_atual_brl, 2),
             "variacao_dia": variacao,
             "valor_investido": round(valor_investido, 2),
             "valor_atual": round(valor_atual, 2),
             "retorno_pct": round(retorno_pct, 2),
             "retorno_rs": round(valor_atual - valor_investido, 2),
             "moeda": a.moeda,
+            "cambio": round(cambio, 4) if em_dolar else None,
         }
 
     tasks = [get_ativo_info(a) for a in ativos]
@@ -114,6 +135,27 @@ def atualizar_preco_manual(ticker: str, preco_data: dict, db: Session = Depends(
         raise HTTPException(status_code=400, detail="Preço não informado")
     salvar_cache(ticker, {"preco": novo_preco, "fonte": "manual", "variacao_dia": 0})
     return {"mensagem": f"Preço de {ticker} atualizado para R$ {novo_preco}"}
+
+
+@router.put("/ativos/{ticker}")
+def editar_ativo(ticker: str, dados: AtivoUpdate, db: Session = Depends(get_db)):
+    ativo = db.query(Ativo).filter(
+        Ativo.ticker == ticker.upper(), Ativo.ativo == True
+    ).first()
+    if not ativo:
+        raise HTTPException(status_code=404, detail="Ativo não encontrado")
+
+    if dados.nome is not None:        ativo.nome = dados.nome
+    if dados.classe is not None:      ativo.classe = dados.classe
+    if dados.mercado is not None:     ativo.mercado = dados.mercado
+    if dados.quantidade is not None:  ativo.quantidade = dados.quantidade
+    if dados.preco_medio is not None: ativo.preco_medio = dados.preco_medio
+    if dados.moeda is not None:       ativo.moeda = dados.moeda
+    if dados.data_compra is not None: ativo.data_compra = dados.data_compra
+
+    db.commit()
+    db.refresh(ativo)
+    return {"mensagem": f"Ativo {ticker.upper()} atualizado", "id": ativo.id}
 
 
 @router.delete("/ativos/{ticker}")
