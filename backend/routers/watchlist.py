@@ -31,8 +31,22 @@ def _deve_enriquecer(ticker: str, db: Session) -> bool:
 @router.get("/watchlist")
 def listar_watchlist(db: Session = Depends(get_db)):
     items = db.query(Watchlist).filter(Watchlist.ativo).all()
+    tickers = [i.ticker for i in items]
+    master_map: dict = {}
+    if tickers:
+        masters = db.query(AtivoMaster).filter(AtivoMaster.ticker.in_(tickers)).all()
+        master_map = {m.ticker: m for m in masters}
     return [
-        {"id": i.id, "ticker": i.ticker, "nome": i.nome, "classe": i.classe, "mercado": i.mercado}
+        {
+            "id": i.id,
+            "ticker": i.ticker,
+            "nome": (i.nome or "")
+            or (master_map[i.ticker].nome if i.ticker in master_map else "")
+            or i.ticker,
+            "classe": i.classe,
+            "mercado": i.mercado,
+            "segmento": master_map[i.ticker].segmento if i.ticker in master_map else "OUTROS",
+        }
         for i in items
     ]
 

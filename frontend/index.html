@@ -83,6 +83,13 @@
   /* SECTION TITLE */
   .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #888; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #DDD9D0; }
   #chart-container { position: relative; }
+
+  /* GRUPO POR SEGMENTO */
+  .grupo-header td { background: #EDEAE3; border-top: 2px solid #D4D0C8; border-bottom: 1px solid #D4D0C8; }
+  .grupo-header:hover td { background: #EDEAE3; }
+  .grupo-label { font-size: 11px !important; font-weight: 700 !important; text-transform: uppercase; letter-spacing: .1em; color: #444; padding: 7px 14px !important; }
+  .grupo-count { font-size: 10px; color: #888; font-weight: 400; margin-left: 8px; text-transform: none; letter-spacing: 0; }
+  .grupo-num { text-align: right !important; padding: 7px 14px !important; font-size: 12px; font-weight: 600; color: #333; }
 </style>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -810,6 +817,38 @@ function showPanel(id) {
   if (id === 'configuracoes') carregarConfig();
   if (id === 'premio') carregarPremioRisco();
 }
+
+const SEGMENTO_LABELS = {
+  "BANCO_FINANCEIRO":       "Bancos",
+  "SEGURO_FINANCEIRO":      "Seguros",
+  "GESTAO_FINANCEIRA":      "Gestão Financeira",
+  "ENERGIA_UTILITIES":      "Energia & Utilities",
+  "SANEAMENTO":             "Saneamento",
+  "PETROLEO_GAS":           "Petróleo & Gás",
+  "MINERACAO_SIDERURGIA":   "Mineração & Siderurgia",
+  "AGRO_ALIMENTOS":         "Agro & Alimentos",
+  "VAREJO_CONSUMO":         "Varejo & Consumo",
+  "SAUDE":                  "Saúde",
+  "TECNOLOGIA":             "Tecnologia",
+  "TELECOMUNICACAO":        "Telecomunicação",
+  "TRANSPORTE_LOGISTICA":   "Transporte & Logística",
+  "INDUSTRIA":              "Indústria",
+  "CONSTRUCAO_IMOBILIARIA": "Construção & Imobiliário",
+  "PAPEL_CELULOSE":         "Papel & Celulose",
+  "COMMODITIES":            "Commodities",
+  "FII_PAPEL":              "FII — Papel (CRI/CRA)",
+  "FII_TIJOLO_LOGISTICA":   "FII — Logística",
+  "FII_TIJOLO_LAJES":       "FII — Lajes Corporativas",
+  "FII_TIJOLO_SHOPPING":    "FII — Shopping",
+  "FII_HIBRIDO":            "FII — Híbrido",
+  "FII_AGRO":               "FII — Agro",
+  "FII_OUTROS":             "FII — Outros",
+  "ETF_BR":                 "ETF Brasil",
+  "ETF_EUA":                "ETF EUA",
+  "OUTROS":                 "Outros",
+};
+
+const CLASSE_ORDER = ['ACAO', 'FII', 'ETF_BR', 'ETF_EUA', 'TESOURO', 'FUNDO_INVEST'];
 
 function fmt(v, decimais = 2) {
   if (v === null || v === undefined) return '—';

@@ -183,7 +183,15 @@ async def listar_ativos(db: Session = Depends(get_db)):
     ativos = db.query(Ativo).filter(Ativo.ativo).all()
     cambio = await buscar_cambio_usd_brl() or 5.0
 
+    # Batch lookup no ativos_master — um único SELECT para todos os tickers
+    tickers = [a.ticker for a in ativos]
+    master_map: dict = {}
+    if tickers:
+        masters = db.query(AtivoMaster).filter(AtivoMaster.ticker.in_(tickers)).all()
+        master_map = {m.ticker: m for m in masters}
+
     async def get_ativo_info(a):
+        master = master_map.get(a.ticker)
         preco_atual = await buscar_preco(a.ticker, a.mercado)
         preco_usd = preco_atual.get("preco") or 0
         if a.classe == "FUNDO_INVEST" and preco_usd == 0:
@@ -201,10 +209,14 @@ async def listar_ativos(db: Session = Depends(get_db)):
         valor_atual = preco_atual_brl * qtd
         retorno_pct = ((preco_usd - pm) / pm * 100) if pm > 0 else 0
 
+        # Enriquece com master — fallback gracioso se enriquecimento ainda não rodou
+        nome_final = (a.nome or "") or (master.nome if master else "") or ""
+        segmento = master.segmento if master else "OUTROS"
+
         return {
             "id": a.id,
             "ticker": a.ticker,
-            "nome": a.nome,
+            "nome": nome_final,
             "classe": a.classe,
             "mercado": a.mercado,
             "quantidade": a.quantidade,
@@ -217,6 +229,9 @@ async def listar_ativos(db: Session = Depends(get_db)):
             "retorno_rs": round(valor_atual - valor_investido, 2),
             "moeda": a.moeda,
             "cambio": round(cambio, 4) if em_dolar else None,
+            "segmento": segmento,
+            "setor_yf": master.setor_yf if master else None,
+            "industria_yf": master.industria_yf if master else None,
         }
 
     tasks = [get_ativo_info(a) for a in ativos]

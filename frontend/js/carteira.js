@@ -2,7 +2,6 @@ let ativoSelecionado = null;
 
 async function carregarCarteira() {
   const tbody = document.getElementById('tabela-carteira');
-  const msg = document.getElementById('msg-carteira');
   tbody.innerHTML = '<tr><td colspan="10" class="loading">Buscando preços em tempo real...</td></tr>';
 
   try {
@@ -13,46 +12,98 @@ async function carregarCarteira() {
       return;
     }
 
-    tbody.innerHTML = ativos.map(a => {
-      const varCls = a.variacao_dia >= 0 ? 'p-green' : 'p-red';
-      const varSinal = a.variacao_dia >= 0 ? '▲ +' : '▼ ';
-      const retCls = a.retorno_pct >= 0 ? 'p-green' : 'p-red';
-      const retSinal = a.retorno_pct >= 0 ? '+' : '';
-      const classePill = {ACAO:'p-gray',FII:'p-gold',ETF_BR:'p-blue',ETF_EUA:'p-green',TESOURO:'p-blue',FUNDO_INVEST:'p-gray'}[a.classe] || 'p-gray';
-      const nome = (a.nome || '').replace(/'/g, "\\'");
-      const dataCompra = a.data_compra || '';
+    // Agrupa: classe → segmento → [ativos]
+    const byClasse = {};
+    ativos.forEach(a => {
+      if (!byClasse[a.classe]) byClasse[a.classe] = {};
+      const seg = a.segmento || 'OUTROS';
+      if (!byClasse[a.classe][seg]) byClasse[a.classe][seg] = [];
+      byClasse[a.classe][seg].push(a);
+    });
 
-      const btnPreco = a.classe === 'FUNDO_INVEST' ? `
-        <button onclick="abrirPrecoManual('${a.ticker}', ${a.preco_atual})"
-          style="padding:3px 8px;font-size:10px;background:#1A5C8A;color:white;border:none;border-radius:4px;cursor:pointer;">Preço</button>
-      ` : '';
+    const allClasses = Object.keys(byClasse);
+    const orderedClasses = [
+      ...CLASSE_ORDER.filter(c => allClasses.includes(c)),
+      ...allClasses.filter(c => !CLASSE_ORDER.includes(c)),
+    ];
 
-      return `<tr>
-        <td><div class="ticker">${a.ticker}</div><div class="nome-dim">${a.nome || ''}</div></td>
-        <td><span class="pill ${classePill}">${a.classe}</span></td>
-        <td>${fmt(a.quantidade, 0)}</td>
-        <td>${fmtMoeda(a.preco_medio)}</td>
-        <td>${fmtMoeda(a.preco_atual)}</td>
-        <td><span class="pill ${varCls}">${varSinal}${fmt(a.variacao_dia)}%</span></td>
-        <td>${fmtMoeda(a.valor_investido)}</td>
-        <td>${fmtMoeda(a.valor_atual)}</td>
-        <td><span class="pill ${retCls}">${retSinal}${fmt(a.retorno_pct)}%</span></td>
-        <td>
-          <div style="display:flex;gap:4px;">
-            ${btnPreco}
-            <button onclick="abrirCompra('${a.ticker}','${nome}',${a.quantidade},${a.preco_medio},${a.preco_atual})"
-              style="padding:3px 8px;font-size:10px;background:#1E6E3A;color:white;border:none;border-radius:4px;cursor:pointer;">+Compra</button>
-            <button onclick="abrirVenda('${a.ticker}','${nome}',${a.quantidade},${a.preco_medio},${a.preco_atual})"
-              style="padding:3px 8px;font-size:10px;background:#C8860A;color:white;border:none;border-radius:4px;cursor:pointer;">-Venda</button>
-            <button onclick="abrirEdicao('${a.ticker}','${nome}','${a.classe}','${a.mercado}',${a.quantidade},${a.preco_medio},'${a.moeda}','${dataCompra}')"
-              style="padding:3px 8px;font-size:10px;background:#1A5C8A;color:white;border:none;border-radius:4px;cursor:pointer;">✎ Editar</button>
-            <button onclick="excluirAtivo('${a.ticker}')"
-              style="padding:3px 8px;font-size:10px;background:#8B1A1A;color:white;border:none;border-radius:4px;cursor:pointer;">✕</button>
-          </div>
-        </td>
-      </tr>`;
-    }).join('');
-  } catch(e) {
+    let html = '';
+
+    orderedClasses.forEach(classe => {
+      const bySegmento = byClasse[classe];
+
+      Object.entries(bySegmento).forEach(([segmento, items]) => {
+        const subtotalInv = items.reduce((s, a) => s + a.valor_investido, 0);
+        const subtotalAtu = items.reduce((s, a) => s + a.valor_atual, 0);
+        const subtotalRet = subtotalInv > 0
+          ? (subtotalAtu - subtotalInv) / subtotalInv * 100 : 0;
+        const subtotalRS  = subtotalAtu - subtotalInv;
+
+        const label   = SEGMENTO_LABELS[segmento] || segmento;
+        const rCls    = subtotalRet >= 0 ? 'p-green' : 'p-red';
+        const rSinal  = subtotalRet >= 0 ? '+' : '';
+        const rsCor   = subtotalRS  >= 0 ? '#1E6E3A' : '#8B1A1A';
+        const rsSinal = subtotalRS  >= 0 ? '+' : '';
+        const n       = items.length;
+
+        html += `<tr class="grupo-header">
+          <td class="grupo-label" colspan="6">${label}
+            <span class="grupo-count">${n} ativo${n !== 1 ? 's' : ''}</span>
+          </td>
+          <td class="grupo-num">${fmtMoeda(subtotalInv)}</td>
+          <td class="grupo-num">${fmtMoeda(subtotalAtu)}</td>
+          <td class="grupo-num">
+            <span class="pill ${rCls}">${rSinal}${fmt(subtotalRet)}%</span>
+            <div style="font-size:10px;color:${rsCor};margin-top:2px;">${rsSinal}${fmtMoeda(Math.abs(subtotalRS))}</div>
+          </td>
+          <td class="grupo-num"></td>
+        </tr>`;
+
+        items.forEach(a => {
+          const varCls  = a.variacao_dia >= 0 ? 'p-green' : 'p-red';
+          const varSin  = a.variacao_dia >= 0 ? '▲ +' : '▼ ';
+          const retCls  = a.retorno_pct  >= 0 ? 'p-green' : 'p-red';
+          const retSin  = a.retorno_pct  >= 0 ? '+' : '';
+          const cpill   = {ACAO:'p-gray',FII:'p-gold',ETF_BR:'p-blue',ETF_EUA:'p-green',
+                           TESOURO:'p-blue',FUNDO_INVEST:'p-gray'}[a.classe] || 'p-gray';
+          const nome      = (a.nome || '').replace(/'/g, "\\'");
+          const dataCompra = a.data_compra || '';
+
+          const btnPreco = a.classe === 'FUNDO_INVEST' ? `
+            <button onclick="abrirPrecoManual('${a.ticker}',${a.preco_atual})"
+              style="padding:3px 8px;font-size:10px;background:#1A5C8A;color:white;border:none;border-radius:4px;cursor:pointer;">Preço</button>
+          ` : '';
+
+          html += `<tr>
+            <td><div class="ticker">${a.ticker}</div><div class="nome-dim">${a.nome || ''}</div></td>
+            <td><span class="pill ${cpill}">${a.classe}</span></td>
+            <td>${fmt(a.quantidade, 0)}</td>
+            <td>${fmtMoeda(a.preco_medio)}</td>
+            <td>${fmtMoeda(a.preco_atual)}</td>
+            <td><span class="pill ${varCls}">${varSin}${fmt(a.variacao_dia)}%</span></td>
+            <td>${fmtMoeda(a.valor_investido)}</td>
+            <td>${fmtMoeda(a.valor_atual)}</td>
+            <td><span class="pill ${retCls}">${retSin}${fmt(a.retorno_pct)}%</span></td>
+            <td>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                ${btnPreco}
+                <button onclick="abrirCompra('${a.ticker}','${nome}',${a.quantidade},${a.preco_medio},${a.preco_atual})"
+                  style="padding:3px 8px;font-size:10px;background:#1E6E3A;color:white;border:none;border-radius:4px;cursor:pointer;">+Compra</button>
+                <button onclick="abrirVenda('${a.ticker}','${nome}',${a.quantidade},${a.preco_medio},${a.preco_atual})"
+                  style="padding:3px 8px;font-size:10px;background:#C8860A;color:white;border:none;border-radius:4px;cursor:pointer;">-Venda</button>
+                <button onclick="abrirEdicao('${a.ticker}','${nome}','${a.classe}','${a.mercado}',${a.quantidade},${a.preco_medio},'${a.moeda}','${dataCompra}')"
+                  style="padding:3px 8px;font-size:10px;background:#1A5C8A;color:white;border:none;border-radius:4px;cursor:pointer;">✎</button>
+                <button onclick="excluirAtivo('${a.ticker}')"
+                  style="padding:3px 8px;font-size:10px;background:#8B1A1A;color:white;border:none;border-radius:4px;cursor:pointer;">✕</button>
+              </div>
+            </td>
+          </tr>`;
+        });
+      });
+    });
+
+    tbody.innerHTML = html;
+  } catch (e) {
     tbody.innerHTML = '<tr><td colspan="10" class="loading">Erro ao carregar carteira.</td></tr>';
   }
 }
@@ -94,7 +145,7 @@ async function confirmarCompra() {
     const res = await fetch('/ativos/compra', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ticker, quantidade, preco })
+      body: JSON.stringify({ ticker, quantidade, preco }),
     });
     const data = await res.json();
     if (res.ok) {
@@ -105,7 +156,7 @@ async function confirmarCompra() {
     } else {
       alert(data.detail);
     }
-  } catch(e) { alert('Erro ao registrar compra.'); }
+  } catch (e) { alert('Erro ao registrar compra.'); }
 }
 
 function abrirVenda(ticker, nome, qtd, precoMedio, precoAtual) {
@@ -144,7 +195,7 @@ async function confirmarVenda() {
     const res = await fetch('/ativos/venda', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ticker, quantidade, preco })
+      body: JSON.stringify({ ticker, quantidade, preco }),
     });
     const data = await res.json();
     if (res.ok) {
@@ -157,7 +208,7 @@ async function confirmarVenda() {
     } else {
       alert(data.detail);
     }
-  } catch(e) { alert('Erro ao registrar venda.'); }
+  } catch (e) { alert('Erro ao registrar venda.'); }
 }
 
 async function excluirAtivo(ticker) {
@@ -170,7 +221,7 @@ async function excluirAtivo(ticker) {
         `<div class="alert alert-green">✓ ${data.mensagem}</div>`;
       carregarCarteira();
     }
-  } catch(e) { alert('Erro ao remover ativo.'); }
+  } catch (e) { alert('Erro ao remover ativo.'); }
 }
 
 function fecharModal(id) {
@@ -212,7 +263,7 @@ async function confirmarEdicao() {
     const res = await fetch(`/ativos/${ticker}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (res.ok) {
@@ -223,7 +274,7 @@ async function confirmarEdicao() {
     } else {
       alert(data.detail || 'Erro ao editar ativo.');
     }
-  } catch(e) { alert('Erro ao editar ativo.'); }
+  } catch (e) { alert('Erro ao editar ativo.'); }
 }
 
 async function confirmarPrecoManual() {
@@ -234,7 +285,7 @@ async function confirmarPrecoManual() {
     const res = await fetch(`/ativos/${ticker}/preco`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ preco })
+      body: JSON.stringify({ preco }),
     });
     if (res.ok) {
       fecharModal('modal-preco');
@@ -243,5 +294,5 @@ async function confirmarPrecoManual() {
       const data = await res.json();
       alert(data.detail);
     }
-  } catch(e) { alert('Erro ao atualizar preço.'); }
+  } catch (e) { alert('Erro ao atualizar preço.'); }
 }
