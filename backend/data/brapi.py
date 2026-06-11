@@ -114,7 +114,7 @@ async def buscar_cambio_usd_brl() -> float:
         cambio = yf.Ticker("USDBRL=X")
         info = await loop.run_in_executor(None, getattr, cambio, "info")
         return info.get("regularMarketPrice") or info.get("previousClose") or 0.0
-    except:
+    except Exception:
         return 0.0
 
 async def buscar_ibovespa() -> dict:

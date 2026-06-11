@@ -85,7 +85,7 @@ async def buscar_selic() -> float:
             r = await client.get(url, timeout=10)
             data = r.json()
             return float(data[0]["valor"])
-    except:
+    except Exception:
         return 13.75
 
 async def buscar_ipca_12m() -> float:
@@ -95,7 +95,7 @@ async def buscar_ipca_12m() -> float:
             r = await client.get(url, timeout=10)
             data = r.json()
             return float(data[0]["valor"])
-    except:
+    except Exception:
         return 5.0
 
 async def buscar_focus_selic() -> float | None:

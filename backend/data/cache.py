@@ -33,7 +33,7 @@ def preco_em_cache(ticker: str) -> dict | None:
                 "cache": True
             }
         return None
-    except:
+    except Exception:
         return None
 
 def salvar_cache(ticker: str, dados: dict):
@@ -64,7 +64,7 @@ def salvar_cache(ticker: str, dados: dict):
             """, (ticker, *values))
         conn.commit()
         conn.close()
-    except:
+    except Exception:
         pass
 
 async def buscar_preco_com_cache(ticker: str, mercado: str = "BR") -> dict:
@@ -95,7 +95,7 @@ def limpar_cache_antigo():
         conn.execute("DELETE FROM precos_cache WHERE atualizado_em < ?", (limite,))
         conn.commit()
         conn.close()
-    except:
+    except Exception:
         pass
 
 def invalidar_cache(ticker: str = None):
@@ -108,5 +108,5 @@ def invalidar_cache(ticker: str = None):
             conn.execute("DELETE FROM precos_cache")
         conn.commit()
         conn.close()
-    except:
+    except Exception:
         pass
