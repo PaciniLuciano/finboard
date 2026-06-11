@@ -1,17 +1,19 @@
 import asyncio
 import time
+
 import yfinance as yf
+
 from backend.scoring.utils import normalizar_dy
 
 _CACHE_TTL = 30 * 60
 _cache: dict = {}
 
 PREMIO_MINIMO = {
-    "ACAO":         8.5,
-    "FII":          3.0,
-    "ETF_BR":       5.0,
-    "ETF_EUA":      8.0,
-    "TESOURO":      0.0,
+    "ACAO": 8.5,
+    "FII": 3.0,
+    "ETF_BR": 5.0,
+    "ETF_EUA": 8.0,
+    "TESOURO": 0.0,
     "FUNDO_INVEST": None,
 }
 
@@ -41,8 +43,7 @@ async def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
     }
 
     if premio_minimo is None:
-        return {**base, "yield_esperado": None, "sinal": "N/A",
-                "detalhes": {}, "yield_tipo": None}
+        return {**base, "yield_esperado": None, "sinal": "N/A", "detalhes": {}, "yield_tipo": None}
 
     try:
         ticker_yf = f"{ticker.upper()}.SA" if mercado == "BR" else ticker.upper()
@@ -68,9 +69,15 @@ async def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
                 yield_esperado, yield_tipo = dy, "dividendo"
 
         if yield_esperado is None:
-            return {**base, "yield_esperado": None, "sinal": "SEM_DADO",
-                    "yield_tipo": None, "detalhes": {"pe": pe, "dy": dy},
-                    "premio_cdi": None, "gap": None}
+            return {
+                **base,
+                "yield_esperado": None,
+                "sinal": "SEM_DADO",
+                "yield_tipo": None,
+                "detalhes": {"pe": pe, "dy": dy},
+                "premio_cdi": None,
+                "gap": None,
+            }
 
         premio_cdi = round(yield_esperado - cdi, 2)
         gap = round(yield_esperado - benchmark, 2)
@@ -93,6 +100,13 @@ async def _calcular(ticker: str, classe: str, mercado: str, cdi: float) -> dict:
         }
 
     except Exception as e:
-        return {**base, "yield_esperado": None, "sinal": "ERRO",
-                "yield_tipo": None, "detalhes": {}, "premio_cdi": None, "gap": None,
-                "erro": str(e)}
+        return {
+            **base,
+            "yield_esperado": None,
+            "sinal": "ERRO",
+            "yield_tipo": None,
+            "detalhes": {},
+            "premio_cdi": None,
+            "gap": None,
+            "erro": str(e),
+        }

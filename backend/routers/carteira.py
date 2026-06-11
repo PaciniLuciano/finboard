@@ -1,19 +1,19 @@
+import asyncio
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from backend.database import get_db, Ativo, RendaFixa
 from backend.data.brapi import buscar_cambio_usd_brl
 from backend.data.cache import buscar_preco_com_cache as buscar_preco
-
-import asyncio
+from backend.database import Ativo, RendaFixa, get_db
 
 router = APIRouter()
 
 
 @router.get("/carteira/resumo")
 async def resumo_carteira(db: Session = Depends(get_db)):
-    ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
-    rfs = db.query(RendaFixa).filter(RendaFixa.ativo == True).all()
+    ativos = db.query(Ativo).filter(Ativo.ativo).all()
+    rfs = db.query(RendaFixa).filter(RendaFixa.ativo).all()
     cambio = await buscar_cambio_usd_brl() or 5.0
 
     t_investido = 0.0
@@ -43,7 +43,7 @@ async def resumo_carteira(db: Session = Depends(get_db)):
         return v_invest, v_atual, a.classe or "OUTROS"
 
     resultados = await asyncio.gather(*[get_ativo_valor(a) for a in ativos])
-    
+
     for v_invest, v_atual, classe in resultados:
         t_investido += v_invest
         t_atual += v_atual

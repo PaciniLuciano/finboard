@@ -1,20 +1,27 @@
+import logging
+
 import backend.ssl_patch  # noqa: F401 — must be first, patches curl_cffi before yfinance loads
 
-import logging
 logging.basicConfig(level=logging.DEBUG)
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.database import criar_banco
-from backend.scorer_job import iniciar_job
-
 from backend.routers import (
-    ativos, carteira, renda_fixa, mercado,
-    watchlist, scoring, dividendos, importexport, config,
+    ativos,
+    carteira,
+    config,
+    dividendos,
+    importexport,
+    mercado,
     premio_risco,
+    renda_fixa,
+    scoring,
+    watchlist,
 )
+from backend.scorer_job import iniciar_job
 
 app = FastAPI(title="Finboard API", version="1.0.0")
 
@@ -23,6 +30,7 @@ app = FastAPI(title="Finboard API", version="1.0.0")
 def startup():
     # Forçar nível DEBUG nos loggers da app APÓS o uvicorn configurar os handlers
     import logging as _logging
+
     _logging.getLogger("backend").setLevel(_logging.DEBUG)
     criar_banco()
     iniciar_job()

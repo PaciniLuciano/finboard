@@ -1,18 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional
 from datetime import date
 
-from backend.database import get_db, Watchlist, AtivoMaster
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from backend.data.enrich import enriquecer_e_salvar
+from backend.database import AtivoMaster, Watchlist, get_db
 
 router = APIRouter()
 
 
 class WatchlistCreate(BaseModel):
     ticker: str
-    nome: Optional[str] = None
+    nome: str | None = None
     classe: str = "ACAO"
     mercado: str = "BR"
 
@@ -30,12 +30,17 @@ def _deve_enriquecer(ticker: str, db: Session) -> bool:
 
 @router.get("/watchlist")
 def listar_watchlist(db: Session = Depends(get_db)):
-    items = db.query(Watchlist).filter(Watchlist.ativo == True).all()
-    return [{"id": i.id, "ticker": i.ticker, "nome": i.nome, "classe": i.classe, "mercado": i.mercado} for i in items]
+    items = db.query(Watchlist).filter(Watchlist.ativo).all()
+    return [
+        {"id": i.id, "ticker": i.ticker, "nome": i.nome, "classe": i.classe, "mercado": i.mercado}
+        for i in items
+    ]
 
 
 @router.post("/watchlist")
-def adicionar_watchlist(item: WatchlistCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def adicionar_watchlist(
+    item: WatchlistCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+):
     ticker = item.ticker.upper()
     existente = db.query(Watchlist).filter(Watchlist.ticker == ticker).first()
     if existente:

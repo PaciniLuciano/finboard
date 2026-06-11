@@ -1,15 +1,18 @@
 import io
+
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from backend.database import get_db, Ativo, RendaFixa, Watchlist, Dividendo
+from backend.database import Ativo, Dividendo, RendaFixa, Watchlist, get_db
 
 router = APIRouter()
 
 
-def _df_para_resposta(df: pd.DataFrame, nome: str, formato: str, extra_dfs: dict = None) -> StreamingResponse:
+def _df_para_resposta(
+    df: pd.DataFrame, nome: str, formato: str, extra_dfs: dict = None
+) -> StreamingResponse:
     if formato == "xlsx":
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine="openpyxl") as writer:
@@ -18,9 +21,11 @@ def _df_para_resposta(df: pd.DataFrame, nome: str, formato: str, extra_dfs: dict
                 for sheet_name, extra_df in extra_dfs.items():
                     extra_df.to_excel(writer, index=False, sheet_name=sheet_name)
         buf.seek(0)
-        return StreamingResponse(buf,
+        return StreamingResponse(
+            buf,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename={nome}.xlsx"})
+            headers={"Content-Disposition": f"attachment; filename={nome}.xlsx"},
+        )
 
     if extra_dfs:
         combined = df.copy()
@@ -29,8 +34,11 @@ def _df_para_resposta(df: pd.DataFrame, nome: str, formato: str, extra_dfs: dict
         df = combined
     buf = io.StringIO()
     df.to_csv(buf, index=False)
-    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={nome}.csv"})
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={nome}.csv"},
+    )
 
 
 def _ler_arquivo(arquivo_bytes: bytes, nome: str) -> pd.DataFrame:
@@ -47,59 +55,79 @@ def _str(val, default=""):
 
 @router.get("/exportar/carteira")
 def exportar_carteira(formato: str = "csv", db: Session = Depends(get_db)):
-    ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
-    dados_ativos = [{
-        "secao": "VARIÁVEL",
-        "ticker/emissor": a.ticker,
-        "nome": a.nome or "",
-        "classe": a.classe,
-        "mercado": a.mercado,
-        "quantidade/valor": a.quantidade,
-        "preco_medio/taxa": a.preco_medio,
-        "moeda": a.moeda,
-        "data_compra/vencimento": str(a.data_compra) if a.data_compra else "",
-        "indexador": "",
-        "liquidez": "",
-    } for a in ativos]
+    ativos = db.query(Ativo).filter(Ativo.ativo).all()
+    dados_ativos = [
+        {
+            "secao": "VARIÁVEL",
+            "ticker/emissor": a.ticker,
+            "nome": a.nome or "",
+            "classe": a.classe,
+            "mercado": a.mercado,
+            "quantidade/valor": a.quantidade,
+            "preco_medio/taxa": a.preco_medio,
+            "moeda": a.moeda,
+            "data_compra/vencimento": str(a.data_compra) if a.data_compra else "",
+            "indexador": "",
+            "liquidez": "",
+        }
+        for a in ativos
+    ]
 
-    rfs = db.query(RendaFixa).filter(RendaFixa.ativo == True).all()
-    dados_rf = [{
-        "secao": "RENDA FIXA",
-        "ticker/emissor": rf.emissor,
-        "nome": rf.tipo,
-        "classe": "RENDA_FIXA",
-        "mercado": "BR",
-        "quantidade/valor": rf.valor_aplicado,
-        "preco_medio/taxa": rf.taxa_pct,
-        "moeda": "BRL",
-        "data_compra/vencimento": str(rf.vencimento) if rf.vencimento else "",
-        "indexador": rf.indexador,
-        "liquidez": rf.liquidez,
-    } for rf in rfs]
+    rfs = db.query(RendaFixa).filter(RendaFixa.ativo).all()
+    dados_rf = [
+        {
+            "secao": "RENDA FIXA",
+            "ticker/emissor": rf.emissor,
+            "nome": rf.tipo,
+            "classe": "RENDA_FIXA",
+            "mercado": "BR",
+            "quantidade/valor": rf.valor_aplicado,
+            "preco_medio/taxa": rf.taxa_pct,
+            "moeda": "BRL",
+            "data_compra/vencimento": str(rf.vencimento) if rf.vencimento else "",
+            "indexador": rf.indexador,
+            "liquidez": rf.liquidez,
+        }
+        for rf in rfs
+    ]
 
     df_carteira = pd.DataFrame(dados_ativos + dados_rf)
 
     divs = db.query(Dividendo).all()
-    df_divs = pd.DataFrame([{
-        "secao": "DIVIDENDOS",
-        "ticker": d.ticker,
-        "valor_por_cota": d.valor_por_cota,
-        "quantidade_cotas": d.quantidade_cotas,
-        "valor_total": d.valor_total,
-        "data_pagamento": str(d.data_pagamento) if d.data_pagamento else "",
-        "tipo": d.tipo,
-    } for d in divs])
+    df_divs = pd.DataFrame(
+        [
+            {
+                "secao": "DIVIDENDOS",
+                "ticker": d.ticker,
+                "valor_por_cota": d.valor_por_cota,
+                "quantidade_cotas": d.quantidade_cotas,
+                "valor_total": d.valor_total,
+                "data_pagamento": str(d.data_pagamento) if d.data_pagamento else "",
+                "tipo": d.tipo,
+            }
+            for d in divs
+        ]
+    )
 
-    return _df_para_resposta(df_carteira, "finboard_export_completo", formato, extra_dfs={"Dividendos": df_divs})
+    return _df_para_resposta(
+        df_carteira, "finboard_export_completo", formato, extra_dfs={"Dividendos": df_divs}
+    )
 
 
 @router.get("/exportar/watchlist")
 def exportar_watchlist(formato: str = "csv", db: Session = Depends(get_db)):
-    items = db.query(Watchlist).filter(Watchlist.ativo == True).all()
-    df = pd.DataFrame([{
-        "ticker": i.ticker, "nome": i.nome or "",
-        "classe": i.classe, "mercado": i.mercado,
-    } for i in items])
+    items = db.query(Watchlist).filter(Watchlist.ativo).all()
+    df = pd.DataFrame(
+        [
+            {
+                "ticker": i.ticker,
+                "nome": i.nome or "",
+                "classe": i.classe,
+                "mercado": i.mercado,
+            }
+            for i in items
+        ]
+    )
     return _df_para_resposta(df, "watchlist", formato)
 
 
@@ -148,9 +176,11 @@ async def importar_carteira(arquivo: UploadFile = File(...), db: Session = Depen
                     except Exception:
                         pass
                 tipo = _str(row.get("nome"), "CDB")
-                existente = db.query(RendaFixa).filter(
-                    RendaFixa.emissor == emissor, RendaFixa.tipo == tipo
-                ).first()
+                existente = (
+                    db.query(RendaFixa)
+                    .filter(RendaFixa.emissor == emissor, RendaFixa.tipo == tipo)
+                    .first()
+                )
                 if existente:
                     existente.ativo = True
                     existente.valor_aplicado = float(row["quantidade"])
@@ -161,15 +191,17 @@ async def importar_carteira(arquivo: UploadFile = File(...), db: Session = Depen
                         existente.vencimento = vencimento
                     atualizados += 1
                 else:
-                    db.add(RendaFixa(
-                        emissor=emissor,
-                        tipo=tipo,
-                        indexador=_str(row.get("indexador"), "CDI"),
-                        taxa_pct=float(row["preco_medio"]),
-                        vencimento=vencimento,
-                        valor_aplicado=float(row["quantidade"]),
-                        liquidez=_str(row.get("liquidez"), "VENCIMENTO"),
-                    ))
+                    db.add(
+                        RendaFixa(
+                            emissor=emissor,
+                            tipo=tipo,
+                            indexador=_str(row.get("indexador"), "CDI"),
+                            taxa_pct=float(row["preco_medio"]),
+                            vencimento=vencimento,
+                            valor_aplicado=float(row["quantidade"]),
+                            liquidez=_str(row.get("liquidez"), "VENCIMENTO"),
+                        )
+                    )
                     importados += 1
             except Exception as e:
                 erros.append(f"RF {emissor}: {e}")
@@ -189,25 +221,27 @@ async def importar_carteira(arquivo: UploadFile = File(...), db: Session = Depen
                 existente = db.query(Ativo).filter(Ativo.ticker == ticker).first()
                 if existente:
                     existente.ativo = True
-                    existente.quantidade  = float(row["quantidade"])
+                    existente.quantidade = float(row["quantidade"])
                     existente.preco_medio = float(row["preco_medio"])
-                    existente.classe      = _str(row.get("classe"), existente.classe)
-                    existente.mercado     = _str(row.get("mercado"), existente.mercado)
-                    existente.nome        = _str(row.get("nome")) or existente.nome
+                    existente.classe = _str(row.get("classe"), existente.classe)
+                    existente.mercado = _str(row.get("mercado"), existente.mercado)
+                    existente.nome = _str(row.get("nome")) or existente.nome
                     if data_compra:
                         existente.data_compra = data_compra
                     atualizados += 1
                 else:
-                    db.add(Ativo(
-                        ticker=ticker,
-                        nome=_str(row.get("nome")) or None,
-                        classe=_str(row.get("classe"), "ACAO"),
-                        mercado=_str(row.get("mercado"), "BR"),
-                        quantidade=float(row["quantidade"]),
-                        preco_medio=float(row["preco_medio"]),
-                        moeda=_str(row.get("moeda"), "BRL"),
-                        data_compra=data_compra,
-                    ))
+                    db.add(
+                        Ativo(
+                            ticker=ticker,
+                            nome=_str(row.get("nome")) or None,
+                            classe=_str(row.get("classe"), "ACAO"),
+                            mercado=_str(row.get("mercado"), "BR"),
+                            quantidade=float(row["quantidade"]),
+                            preco_medio=float(row["preco_medio"]),
+                            moeda=_str(row.get("moeda"), "BRL"),
+                            data_compra=data_compra,
+                        )
+                    )
                     importados += 1
             except Exception as e:
                 erros.append(f"{ticker}: {e}")
@@ -236,18 +270,20 @@ async def importar_watchlist(arquivo: UploadFile = File(...), db: Session = Depe
         try:
             existente = db.query(Watchlist).filter(Watchlist.ticker == ticker).first()
             if existente:
-                existente.ativo   = True
-                existente.classe  = _str(row.get("classe"), existente.classe or "ACAO")
+                existente.ativo = True
+                existente.classe = _str(row.get("classe"), existente.classe or "ACAO")
                 existente.mercado = _str(row.get("mercado"), existente.mercado or "BR")
-                existente.nome    = _str(row.get("nome")) or existente.nome
+                existente.nome = _str(row.get("nome")) or existente.nome
                 atualizados += 1
             else:
-                db.add(Watchlist(
-                    ticker=ticker,
-                    nome=_str(row.get("nome")) or None,
-                    classe=_str(row.get("classe"), "ACAO"),
-                    mercado=_str(row.get("mercado"), "BR"),
-                ))
+                db.add(
+                    Watchlist(
+                        ticker=ticker,
+                        nome=_str(row.get("nome")) or None,
+                        classe=_str(row.get("classe"), "ACAO"),
+                        mercado=_str(row.get("mercado"), "BR"),
+                    )
+                )
                 importados += 1
         except Exception as e:
             erros.append(f"{ticker}: {e}")

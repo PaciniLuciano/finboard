@@ -1,8 +1,9 @@
 import asyncio
 import logging
-import httpx
-from datetime import datetime, timedelta
 import time
+from datetime import datetime
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -10,46 +11,69 @@ BACEN_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs"
 
 # Ajuste de score macro por setor — modificador somado ao score base da classe
 AJUSTE_SETOR = {
-    "BANCO":       {"DEFENSIVO":  1.5, "NEUTRO":  0.5, "AGRESSIVO": -1.0},
-    "SEGURO":      {"DEFENSIVO":  1.0, "NEUTRO":  0.5, "AGRESSIVO": -0.5},
-    "VAREJO":      {"DEFENSIVO": -1.5, "NEUTRO": -0.5, "AGRESSIVO":  1.5},
-    "CONSTRUTORA": {"DEFENSIVO": -1.5, "NEUTRO": -0.5, "AGRESSIVO":  1.5},
-    "TECH":        {"DEFENSIVO": -1.0, "NEUTRO":  0.0, "AGRESSIVO":  1.0},
-    "COMMODITY":   {"DEFENSIVO":  0.0, "NEUTRO":  0.5, "AGRESSIVO":  0.5},
-    "FII_PAPEL":   {"DEFENSIVO":  1.5, "NEUTRO":  0.5, "AGRESSIVO": -1.0},
+    "BANCO": {"DEFENSIVO": 1.5, "NEUTRO": 0.5, "AGRESSIVO": -1.0},
+    "SEGURO": {"DEFENSIVO": 1.0, "NEUTRO": 0.5, "AGRESSIVO": -0.5},
+    "VAREJO": {"DEFENSIVO": -1.5, "NEUTRO": -0.5, "AGRESSIVO": 1.5},
+    "CONSTRUTORA": {"DEFENSIVO": -1.5, "NEUTRO": -0.5, "AGRESSIVO": 1.5},
+    "TECH": {"DEFENSIVO": -1.0, "NEUTRO": 0.0, "AGRESSIVO": 1.0},
+    "COMMODITY": {"DEFENSIVO": 0.0, "NEUTRO": 0.5, "AGRESSIVO": 0.5},
+    "FII_PAPEL": {"DEFENSIVO": 1.5, "NEUTRO": 0.5, "AGRESSIVO": -1.0},
 }
 
 TICKER_SETOR = {
-    "ITUB": "BANCO",  "BBDC": "BANCO",  "SANB": "BANCO",
-    "BBAS": "BANCO",  "BPAC": "BANCO",  "ABCB": "BANCO",
-    "MGLU": "VAREJO", "VIIA": "VAREJO", "AMER": "VAREJO",
-    "LREN": "VAREJO", "ALPA": "VAREJO", "SOMA": "VAREJO",
-    "CYRE": "CONSTRUTORA", "MRVE": "CONSTRUTORA", "EZTC": "CONSTRUTORA",
-    "DIRR": "CONSTRUTORA", "EVEN": "CONSTRUTORA", "LAVV": "CONSTRUTORA",
-    "PETR": "COMMODITY", "VALE": "COMMODITY", "CSNA": "COMMODITY",
-    "GGBR": "COMMODITY", "USIM": "COMMODITY", "BRAP": "COMMODITY",
-    "BBSE": "SEGURO",  "PSSA": "SEGURO",  "EGIE": "SEGURO",
-    "MXRF": "FII_PAPEL", "KNCR": "FII_PAPEL", "IRDM": "FII_PAPEL",
-    "RECR": "FII_PAPEL", "BCFF": "FII_PAPEL",
+    "ITUB": "BANCO",
+    "BBDC": "BANCO",
+    "SANB": "BANCO",
+    "BBAS": "BANCO",
+    "BPAC": "BANCO",
+    "ABCB": "BANCO",
+    "MGLU": "VAREJO",
+    "VIIA": "VAREJO",
+    "AMER": "VAREJO",
+    "LREN": "VAREJO",
+    "ALPA": "VAREJO",
+    "SOMA": "VAREJO",
+    "CYRE": "CONSTRUTORA",
+    "MRVE": "CONSTRUTORA",
+    "EZTC": "CONSTRUTORA",
+    "DIRR": "CONSTRUTORA",
+    "EVEN": "CONSTRUTORA",
+    "LAVV": "CONSTRUTORA",
+    "PETR": "COMMODITY",
+    "VALE": "COMMODITY",
+    "CSNA": "COMMODITY",
+    "GGBR": "COMMODITY",
+    "USIM": "COMMODITY",
+    "BRAP": "COMMODITY",
+    "BBSE": "SEGURO",
+    "PSSA": "SEGURO",
+    "EGIE": "SEGURO",
+    "MXRF": "FII_PAPEL",
+    "KNCR": "FII_PAPEL",
+    "IRDM": "FII_PAPEL",
+    "RECR": "FII_PAPEL",
+    "BCFF": "FII_PAPEL",
 }
 
 SEGMENTO_PARA_AJUSTE = {
-    "BANCO_FINANCEIRO":       "BANCO",
-    "SEGURO_FINANCEIRO":      "SEGURO",
-    "VAREJO_CONSUMO":         "VAREJO",
+    "BANCO_FINANCEIRO": "BANCO",
+    "SEGURO_FINANCEIRO": "SEGURO",
+    "VAREJO_CONSUMO": "VAREJO",
     "CONSTRUCAO_IMOBILIARIA": "CONSTRUTORA",
-    "TECNOLOGIA":             "TECH",
-    "PETROLEO_GAS":           "COMMODITY",
-    "MINERACAO_SIDERURGIA":   "COMMODITY",
-    "AGRO_ALIMENTOS":         "COMMODITY",
-    "PAPEL_CELULOSE":         "COMMODITY",
-    "FII_PAPEL":              "FII_PAPEL",
+    "TECNOLOGIA": "TECH",
+    "PETROLEO_GAS": "COMMODITY",
+    "MINERACAO_SIDERURGIA": "COMMODITY",
+    "AGRO_ALIMENTOS": "COMMODITY",
+    "PAPEL_CELULOSE": "COMMODITY",
+    "FII_PAPEL": "FII_PAPEL",
 }
+
 
 def detectar_setor(ticker: str) -> str | None:
     # Prioridade: ativos_master (segmento enriquecido via yfinance)
     try:
         import sqlite3
+
         conn = sqlite3.connect("finboard.db")
         row = conn.execute(
             "SELECT segmento FROM ativos_master WHERE ticker=?", (ticker.upper(),)
@@ -64,19 +88,23 @@ def detectar_setor(ticker: str) -> str | None:
     # Fallback: dicionario hardcoded (primeiros 4 caracteres)
     return TICKER_SETOR.get(ticker[:4].upper())
 
+
 # Cache in-memory para dados macro — TTL 6h
 _MACRO_TTL = 6 * 3600
 _macro_cache: dict = {"resultado": None, "ts": 0.0}
 
+
 def invalidar_cache_macro() -> None:
     _macro_cache["resultado"] = None
     _macro_cache["ts"] = 0.0
+
 
 def _cache_macro_valido() -> bool:
     return (
         _macro_cache["resultado"] is not None
         and (time.monotonic() - _macro_cache["ts"]) < _MACRO_TTL
     )
+
 
 async def buscar_selic() -> float:
     try:
@@ -88,6 +116,7 @@ async def buscar_selic() -> float:
     except Exception:
         return 13.75
 
+
 async def buscar_ipca_12m() -> float:
     try:
         url = f"{BACEN_URL}.13522/dados/ultimos/1?formato=json"
@@ -97,6 +126,7 @@ async def buscar_ipca_12m() -> float:
             return float(data[0]["valor"])
     except Exception:
         return 5.0
+
 
 async def buscar_focus_selic() -> float | None:
     ano_atual = datetime.now().year
@@ -125,6 +155,7 @@ async def buscar_focus_selic() -> float | None:
             logger.error("Erro ao buscar Focus Selic %s: %s", ano, e)
     return None
 
+
 async def calcular_regime_macro(forcar: bool = False) -> dict:
     if not forcar and _cache_macro_valido():
         return {**_macro_cache["resultado"], "cache": True}
@@ -137,7 +168,7 @@ async def calcular_regime_macro(forcar: bool = False) -> dict:
         "selic_atual": selic,
         "ipca_12m": ipca,
         "juro_real": round(selic - ipca, 2),
-        "focus_selic_esperada": selic_esperada
+        "focus_selic_esperada": selic_esperada,
     }
 
     pontos_regime = 0
@@ -174,21 +205,36 @@ async def calcular_regime_macro(forcar: bool = False) -> dict:
 
     if regime == "DEFENSIVO":
         scores = {
-            "ACAO": 4.0, "FII_PAPEL": 8.5, "FII_TIJOLO": 4.0,
-            "ETF_BR": 4.5, "ETF_EUA": 6.0,
-            "TESOURO_IPCA": 9.0, "TESOURO_SELIC": 8.0, "CDB": 8.5,
+            "ACAO": 4.0,
+            "FII_PAPEL": 8.5,
+            "FII_TIJOLO": 4.0,
+            "ETF_BR": 4.5,
+            "ETF_EUA": 6.0,
+            "TESOURO_IPCA": 9.0,
+            "TESOURO_SELIC": 8.0,
+            "CDB": 8.5,
         }
     elif regime == "NEUTRO":
         scores = {
-            "ACAO": 6.0, "FII_PAPEL": 7.0, "FII_TIJOLO": 6.0,
-            "ETF_BR": 6.0, "ETF_EUA": 6.5,
-            "TESOURO_IPCA": 7.5, "TESOURO_SELIC": 6.5, "CDB": 7.0,
+            "ACAO": 6.0,
+            "FII_PAPEL": 7.0,
+            "FII_TIJOLO": 6.0,
+            "ETF_BR": 6.0,
+            "ETF_EUA": 6.5,
+            "TESOURO_IPCA": 7.5,
+            "TESOURO_SELIC": 6.5,
+            "CDB": 7.0,
         }
     else:
         scores = {
-            "ACAO": 8.5, "FII_PAPEL": 5.5, "FII_TIJOLO": 8.5,
-            "ETF_BR": 8.0, "ETF_EUA": 7.5,
-            "TESOURO_IPCA": 6.0, "TESOURO_SELIC": 4.5, "CDB": 5.0,
+            "ACAO": 8.5,
+            "FII_PAPEL": 5.5,
+            "FII_TIJOLO": 8.5,
+            "ETF_BR": 8.0,
+            "ETF_EUA": 7.5,
+            "TESOURO_IPCA": 6.0,
+            "TESOURO_SELIC": 4.5,
+            "CDB": 5.0,
         }
 
     resultado = {
@@ -197,11 +243,12 @@ async def calcular_regime_macro(forcar: bool = False) -> dict:
         "detalhes": detalhes,
         "scores_por_classe": scores,
         "calculado_em": datetime.now().isoformat(),
-        "cache": False
+        "cache": False,
     }
     _macro_cache["resultado"] = resultado
     _macro_cache["ts"] = time.monotonic()
     return resultado
+
 
 async def get_score_macro(classe: str, macro_info: dict = None, ticker: str = "") -> float:
     if macro_info is None:
@@ -209,9 +256,12 @@ async def get_score_macro(classe: str, macro_info: dict = None, ticker: str = ""
     scores = macro_info.get("scores_por_classe", {})
     regime = macro_info.get("regime", "NEUTRO")
     mapa = {
-        "ACAO": "ACAO", "FII": "FII_TIJOLO",
-        "ETF_BR": "ETF_BR", "ETF_EUA": "ETF_EUA",
-        "TESOURO": "TESOURO_IPCA", "CDB": "CDB",
+        "ACAO": "ACAO",
+        "FII": "FII_TIJOLO",
+        "ETF_BR": "ETF_BR",
+        "ETF_EUA": "ETF_EUA",
+        "TESOURO": "TESOURO_IPCA",
+        "CDB": "CDB",
     }
     score_base = scores.get(mapa.get(classe, "ACAO"), 5.0)
 

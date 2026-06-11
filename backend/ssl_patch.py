@@ -4,8 +4,9 @@ Patch SSL verification for environments with self-signed proxy certificates
 
 Must be imported BEFORE yfinance and curl_cffi to take effect.
 """
-import ssl
+
 import os
+import ssl
 import warnings
 
 # Python ssl module — for urllib/httpx
@@ -17,6 +18,7 @@ os.environ.setdefault("PYTHONHTTPSVERIFY", "0")
 # Suppress InsecureRequestWarning from urllib3/requests
 try:
     import urllib3
+
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 except Exception:
     pass

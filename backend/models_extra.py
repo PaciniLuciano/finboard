@@ -1,6 +1,9 @@
-from backend.database import Base
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime
 from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text
+
+from backend.database import Base
+
 
 class ScoreCache(Base):
     __tablename__ = "scores_cache"

@@ -1,9 +1,10 @@
-import yfinance as yf
-import httpx
-import os
-import urllib3
 import asyncio
+import os
 from datetime import datetime
+
+import httpx
+import urllib3
+import yfinance as yf
 from dotenv import load_dotenv
 
 # Desabilita avisos de conexão insegura
@@ -14,6 +15,7 @@ BRAPI_TOKEN = os.getenv("BRAPI_TOKEN")
 BRAPI_URL = "https://brapi.dev/api"
 
 # ── BRAPI (ETFs BR) ───────────────────────────────────────
+
 
 async def buscar_preco_brapi(ticker: str) -> dict:
     """Busca preço via brapi.dev — usado para ETFs BR."""
@@ -35,28 +37,28 @@ async def buscar_preco_brapi(ticker: str) -> dict:
             "nome": r.get("longName") or r.get("shortName"),
             "moeda": "BRL",
             "fonte": "brapi",
-            "atualizado_em": datetime.now().isoformat()
+            "atualizado_em": datetime.now().isoformat(),
         }
     except Exception as e:
         return {"erro": str(e), "ticker": ticker}
 
+
 # ── YFINANCE (Ações, FIIs, ETFs EUA) ─────────────────────
+
 
 async def buscar_preco_yfinance(ticker: str, mercado: str = "BR") -> dict:
     """Busca preço via yfinance."""
     try:
         ticker_yf = f"{ticker}.SA" if mercado == "BR" else ticker
-        
+
         loop = asyncio.get_running_loop()
         ativo = yf.Ticker(ticker_yf)
-        
+
         # yfinance doesn't have an async API for info, running in executor
         info = await loop.run_in_executor(None, getattr, ativo, "info")
 
         preco = (
-            info.get("regularMarketPrice") or
-            info.get("currentPrice") or
-            info.get("previousClose")
+            info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
         )
 
         variacao = info.get("regularMarketChangePercent", 0)
@@ -69,15 +71,27 @@ async def buscar_preco_yfinance(ticker: str, mercado: str = "BR") -> dict:
             "nome": info.get("longName") or info.get("shortName"),
             "moeda": "BRL" if mercado == "BR" else "USD",
             "fonte": "yfinance",
-            "atualizado_em": datetime.now().isoformat()
+            "atualizado_em": datetime.now().isoformat(),
         }
     except Exception as e:
         return {"erro": str(e), "ticker": ticker}
 
+
 # ── ROTEADOR PRINCIPAL ────────────────────────────────────
 
-ETFs_BR = ["BOVA11", "IVVB11", "SMAL11", "HASH11", "XFIX11",
-           "DIVO11", "ECOO11", "FIND11", "GOLD11", "MATB11"]
+ETFs_BR = [
+    "BOVA11",
+    "IVVB11",
+    "SMAL11",
+    "HASH11",
+    "XFIX11",
+    "DIVO11",
+    "ECOO11",
+    "FIND11",
+    "GOLD11",
+    "MATB11",
+]
+
 
 async def buscar_preco(ticker: str, mercado: str = "BR") -> dict:
     """
@@ -102,10 +116,12 @@ async def buscar_preco(ticker: str, mercado: str = "BR") -> dict:
     # fallback para brapi
     return await buscar_preco_brapi(ticker)
 
+
 async def buscar_multiplos(tickers: list, mercado: str = "BR") -> list:
     """Busca preços de múltiplos tickers em paralelo."""
     tasks = [buscar_preco(t, mercado) for t in tickers]
     return await asyncio.gather(*tasks)
+
 
 async def buscar_cambio_usd_brl() -> float:
     """Busca câmbio USD/BRL atual."""
@@ -116,6 +132,7 @@ async def buscar_cambio_usd_brl() -> float:
         return info.get("regularMarketPrice") or info.get("previousClose") or 0.0
     except Exception:
         return 0.0
+
 
 async def buscar_ibovespa() -> dict:
     """Busca dados do Ibovespa."""
@@ -128,7 +145,7 @@ async def buscar_ibovespa() -> dict:
             "preco": info.get("regularMarketPrice") or info.get("previousClose") or 0.0,
             "variacao_dia": round(info.get("regularMarketChangePercent", 0), 2),
             "fonte": "yfinance",
-            "atualizado_em": datetime.now().isoformat()
+            "atualizado_em": datetime.now().isoformat(),
         }
     except Exception as e:
         return {
@@ -136,5 +153,5 @@ async def buscar_ibovespa() -> dict:
             "preco": 0.0,
             "variacao_dia": 0.0,
             "erro": str(e),
-            "atualizado_em": datetime.now().isoformat()
+            "atualizado_em": datetime.now().isoformat(),
         }

@@ -1,27 +1,28 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional
-from datetime import date, timedelta
 import asyncio
+from datetime import date
 
-from backend.database import get_db, Ativo, AtivoMaster
-from backend.data.cache import buscar_preco_com_cache as buscar_preco, salvar_cache
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from backend.data.brapi import buscar_cambio_usd_brl
+from backend.data.cache import buscar_preco_com_cache as buscar_preco
+from backend.data.cache import salvar_cache
 from backend.data.enrich import enrich_ticker, enriquecer_e_salvar
+from backend.database import Ativo, AtivoMaster, get_db
 
 router = APIRouter()
 
 
 class AtivoCreate(BaseModel):
     ticker: str
-    nome: Optional[str] = None
+    nome: str | None = None
     classe: str
     mercado: str = "BR"
     quantidade: float
     preco_medio: float
     moeda: str = "BRL"
-    data_compra: Optional[date] = None
+    data_compra: date | None = None
 
 
 class NovaCompra(BaseModel):
@@ -37,13 +38,13 @@ class Venda(BaseModel):
 
 
 class AtivoUpdate(BaseModel):
-    nome: Optional[str] = None
-    classe: Optional[str] = None
-    mercado: Optional[str] = None
-    quantidade: Optional[float] = None
-    preco_medio: Optional[float] = None
-    moeda: Optional[str] = None
-    data_compra: Optional[date] = None
+    nome: str | None = None
+    classe: str | None = None
+    mercado: str | None = None
+    quantidade: float | None = None
+    preco_medio: float | None = None
+    moeda: str | None = None
+    data_compra: date | None = None
 
 
 def _deve_enriquecer(ticker: str, db: Session) -> bool:
@@ -60,16 +61,24 @@ def _deve_enriquecer(ticker: str, db: Session) -> bool:
 
 # ── MASTER DATA ───────────────────────────────────────────
 
+
 @router.get("/ativos/master")
 def listar_master(db: Session = Depends(get_db)):
     registros = db.query(AtivoMaster).all()
     return [
         {
-            "ticker": r.ticker, "nome": r.nome, "classe": r.classe,
-            "segmento": r.segmento, "setor_yf": r.setor_yf,
-            "industria_yf": r.industria_yf, "pais": r.pais, "moeda": r.moeda,
-            "market_cap": r.market_cap, "beta": r.beta,
-            "data_cadastro": r.data_cadastro, "ultima_atualizacao": r.ultima_atualizacao,
+            "ticker": r.ticker,
+            "nome": r.nome,
+            "classe": r.classe,
+            "segmento": r.segmento,
+            "setor_yf": r.setor_yf,
+            "industria_yf": r.industria_yf,
+            "pais": r.pais,
+            "moeda": r.moeda,
+            "market_cap": r.market_cap,
+            "beta": r.beta,
+            "data_cadastro": r.data_cadastro,
+            "ultima_atualizacao": r.ultima_atualizacao,
         }
         for r in registros
     ]
@@ -79,13 +88,23 @@ def listar_master(db: Session = Depends(get_db)):
 def get_master(ticker: str, db: Session = Depends(get_db)):
     master = db.query(AtivoMaster).filter(AtivoMaster.ticker == ticker.upper()).first()
     if not master:
-        raise HTTPException(status_code=404, detail=f"Master data de {ticker.upper()} nao encontrado")
+        raise HTTPException(
+            status_code=404, detail=f"Master data de {ticker.upper()} nao encontrado"
+        )
     return {
-        "ticker": master.ticker, "nome": master.nome, "classe": master.classe,
-        "segmento": master.segmento, "setor_yf": master.setor_yf,
-        "industria_yf": master.industria_yf, "pais": master.pais, "moeda": master.moeda,
-        "descricao": master.descricao, "market_cap": master.market_cap, "beta": master.beta,
-        "data_cadastro": master.data_cadastro, "ultima_atualizacao": master.ultima_atualizacao,
+        "ticker": master.ticker,
+        "nome": master.nome,
+        "classe": master.classe,
+        "segmento": master.segmento,
+        "setor_yf": master.setor_yf,
+        "industria_yf": master.industria_yf,
+        "pais": master.pais,
+        "moeda": master.moeda,
+        "descricao": master.descricao,
+        "market_cap": master.market_cap,
+        "beta": master.beta,
+        "data_cadastro": master.data_cadastro,
+        "ultima_atualizacao": master.ultima_atualizacao,
     }
 
 
@@ -97,6 +116,7 @@ async def atualizar_master(ticker: str, classe: str = "ACAO", db: Session = Depe
         classe = ativo.classe
     else:
         from backend.database import Watchlist
+
         wl = db.query(Watchlist).filter(Watchlist.ticker == ticker).first()
         if wl:
             classe = wl.classe
@@ -115,12 +135,15 @@ async def atualizar_master(ticker: str, classe: str = "ACAO", db: Session = Depe
 
 # ── CARTEIRA ──────────────────────────────────────────────
 
+
 @router.post("/ativos")
-def cadastrar_ativo(ativo: AtivoCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def cadastrar_ativo(
+    ativo: AtivoCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+):
     ticker = ativo.ticker.upper()
     existente = db.query(Ativo).filter(Ativo.ticker == ticker).first()
     if existente:
-        if existente.ativo == False:
+        if not existente.ativo:
             existente.ativo = True
             existente.nome = ativo.nome
             existente.classe = ativo.classe
@@ -157,7 +180,7 @@ def cadastrar_ativo(ativo: AtivoCreate, background_tasks: BackgroundTasks, db: S
 
 @router.get("/ativos")
 async def listar_ativos(db: Session = Depends(get_db)):
-    ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
+    ativos = db.query(Ativo).filter(Ativo.ativo).all()
     cambio = await buscar_cambio_usd_brl() or 5.0
 
     async def get_ativo_info(a):
@@ -203,7 +226,7 @@ async def listar_ativos(db: Session = Depends(get_db)):
 @router.patch("/ativos/{ticker}/preco")
 def atualizar_preco_manual(ticker: str, preco_data: dict, db: Session = Depends(get_db)):
     ticker = ticker.upper()
-    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo).first()
     if not ativo:
         raise HTTPException(status_code=404, detail="Ativo nao encontrado")
     novo_preco = preco_data.get("preco")
@@ -215,19 +238,24 @@ def atualizar_preco_manual(ticker: str, preco_data: dict, db: Session = Depends(
 
 @router.put("/ativos/{ticker}")
 def editar_ativo(ticker: str, dados: AtivoUpdate, db: Session = Depends(get_db)):
-    ativo = db.query(Ativo).filter(
-        Ativo.ticker == ticker.upper(), Ativo.ativo == True
-    ).first()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker.upper(), Ativo.ativo).first()
     if not ativo:
         raise HTTPException(status_code=404, detail="Ativo nao encontrado")
 
-    if dados.nome is not None:        ativo.nome = dados.nome
-    if dados.classe is not None:      ativo.classe = dados.classe
-    if dados.mercado is not None:     ativo.mercado = dados.mercado
-    if dados.quantidade is not None:  ativo.quantidade = dados.quantidade
-    if dados.preco_medio is not None: ativo.preco_medio = dados.preco_medio
-    if dados.moeda is not None:       ativo.moeda = dados.moeda
-    if dados.data_compra is not None: ativo.data_compra = dados.data_compra
+    if dados.nome is not None:
+        ativo.nome = dados.nome
+    if dados.classe is not None:
+        ativo.classe = dados.classe
+    if dados.mercado is not None:
+        ativo.mercado = dados.mercado
+    if dados.quantidade is not None:
+        ativo.quantidade = dados.quantidade
+    if dados.preco_medio is not None:
+        ativo.preco_medio = dados.preco_medio
+    if dados.moeda is not None:
+        ativo.moeda = dados.moeda
+    if dados.data_compra is not None:
+        ativo.data_compra = dados.data_compra
 
     db.commit()
     db.refresh(ativo)
@@ -247,9 +275,11 @@ def remover_ativo(ticker: str, db: Session = Depends(get_db)):
 @router.post("/ativos/compra")
 def registrar_compra(compra: NovaCompra, db: Session = Depends(get_db)):
     ticker = compra.ticker.upper()
-    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo).first()
     if not ativo:
-        raise HTTPException(status_code=404, detail=f"Ativo {ticker} nao encontrado. Cadastre primeiro.")
+        raise HTTPException(
+            status_code=404, detail=f"Ativo {ticker} nao encontrado. Cadastre primeiro."
+        )
 
     custo_atual = ativo.quantidade * ativo.preco_medio
     custo_novo = compra.quantidade * compra.preco
@@ -276,12 +306,14 @@ def registrar_compra(compra: NovaCompra, db: Session = Depends(get_db)):
 @router.post("/ativos/venda")
 def registrar_venda(venda: Venda, db: Session = Depends(get_db)):
     ticker = venda.ticker.upper()
-    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo).first()
     if not ativo:
         raise HTTPException(status_code=404, detail=f"Ativo {ticker} nao encontrado.")
 
     if venda.quantidade > ativo.quantidade:
-        raise HTTPException(status_code=400, detail=f"Quantidade insuficiente. Voce tem {ativo.quantidade} cotas.")
+        raise HTTPException(
+            status_code=400, detail=f"Quantidade insuficiente. Voce tem {ativo.quantidade} cotas."
+        )
 
     lucro = (venda.preco - ativo.preco_medio) * venda.quantidade
     nova_quantidade = ativo.quantidade - venda.quantidade

@@ -1,7 +1,8 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, Date, DateTime, Text, Boolean
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, Integer, String, Text, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
 
 DATABASE_URL = "sqlite:///./finboard.db"
 
@@ -10,6 +11,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # ── TABELAS ──────────────────────────────────────────────
+
 
 class Ativo(Base):
     __tablename__ = "ativos"
@@ -25,6 +27,7 @@ class Ativo(Base):
     ativo = Column(Boolean, default=True)
     criado_em = Column(DateTime, default=datetime.now)
 
+
 class RendaFixa(Base):
     __tablename__ = "renda_fixa"
     id = Column(Integer, primary_key=True, index=True)
@@ -39,6 +42,7 @@ class RendaFixa(Base):
     ativo = Column(Boolean, default=True)
     criado_em = Column(DateTime, default=datetime.now)
 
+
 class PrecoCache(Base):
     __tablename__ = "precos_cache"
     id = Column(Integer, primary_key=True, index=True)
@@ -51,6 +55,7 @@ class PrecoCache(Base):
     fonte = Column(String)
     atualizado_em = Column(DateTime, default=datetime.now)
 
+
 class Score(Base):
     __tablename__ = "scores"
     id = Column(Integer, primary_key=True, index=True)
@@ -62,6 +67,7 @@ class Score(Base):
     regime_macro = Column(String, nullable=True)
     calculado_em = Column(DateTime, default=datetime.now)
 
+
 class Alerta(Base):
     __tablename__ = "alertas"
     id = Column(Integer, primary_key=True, index=True)
@@ -72,12 +78,14 @@ class Alerta(Base):
     lido = Column(Boolean, default=False)
     criado_em = Column(DateTime, default=datetime.now)
 
+
 class Configuracao(Base):
     __tablename__ = "configuracoes"
     id = Column(Integer, primary_key=True, index=True)
     chave = Column(String, unique=True)
     valor = Column(Text)
     atualizado_em = Column(DateTime, default=datetime.now)
+
 
 class HistoricoAgente(Base):
     __tablename__ = "historico_agente"
@@ -86,15 +94,17 @@ class HistoricoAgente(Base):
     resposta = Column(Text)
     criado_em = Column(DateTime, default=datetime.now)
 
+
 class Watchlist(Base):
     __tablename__ = "watchlist"
-    __table_args__ = {'extend_existing': True}
+    __table_args__ = {"extend_existing": True}
     id = Column(Integer, primary_key=True, index=True)
     ticker = Column(String, unique=True, index=True)
     nome = Column(String)
     classe = Column(String, default="ACAO")
     mercado = Column(String, default="BR")
     ativo = Column(Boolean, default=True)
+
 
 class Dividendo(Base):
     __tablename__ = "dividendos"
@@ -106,27 +116,31 @@ class Dividendo(Base):
     data_pagamento = Column(Date)
     tipo = Column(String, default="PROVENTO")
 
+
 class AtivoMaster(Base):
     __tablename__ = "ativos_master"
-    ticker             = Column(String, primary_key=True)
-    nome               = Column(String)
-    classe             = Column(String)
-    segmento           = Column(String)
-    setor_yf           = Column(String)
-    industria_yf       = Column(String)
-    pais               = Column(String)
-    moeda              = Column(String)
-    descricao          = Column(String)
-    market_cap         = Column(Float)
-    beta               = Column(Float)
-    data_cadastro      = Column(String)
+    ticker = Column(String, primary_key=True)
+    nome = Column(String)
+    classe = Column(String)
+    segmento = Column(String)
+    setor_yf = Column(String)
+    industria_yf = Column(String)
+    pais = Column(String)
+    moeda = Column(String)
+    descricao = Column(String)
+    market_cap = Column(Float)
+    beta = Column(Float)
+    data_cadastro = Column(String)
     ultima_atualizacao = Column(String)
 
+
 # ── CRIAR TABELAS ────────────────────────────────────────
+
 
 def criar_banco():
     Base.metadata.create_all(bind=engine)
     print("[OK] Banco de dados criado com sucesso")
+
 
 def get_db():
     db = SessionLocal()
@@ -134,6 +148,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     criar_banco()

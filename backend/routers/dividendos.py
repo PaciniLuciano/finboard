@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
-from pydantic import BaseModel
 from datetime import date
-import yfinance as yf
 
-from backend.database import get_db, Ativo, Dividendo
+import yfinance as yf
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import desc, func
+from sqlalchemy.orm import Session
+
 from backend.data.cache import buscar_preco_com_cache as buscar_preco
+from backend.database import Ativo, Dividendo, get_db
 
 router = APIRouter()
 
@@ -23,42 +24,71 @@ class DividendoCreate(BaseModel):
 def registrar_dividendo(div: DividendoCreate, db: Session = Depends(get_db)):
     ticker = div.ticker.upper()
     valor_total = div.valor_por_cota * div.quantidade_cotas
-    db.add(Dividendo(
-        ticker=ticker,
-        valor_por_cota=div.valor_por_cota,
-        quantidade_cotas=div.quantidade_cotas,
-        valor_total=valor_total,
-        data_pagamento=div.data_pagamento,
-        tipo=div.tipo,
-    ))
+    db.add(
+        Dividendo(
+            ticker=ticker,
+            valor_por_cota=div.valor_por_cota,
+            quantidade_cotas=div.quantidade_cotas,
+            valor_total=valor_total,
+            data_pagamento=div.data_pagamento,
+            tipo=div.tipo,
+        )
+    )
     db.commit()
     return {"mensagem": f"Dividendo de {ticker} registrado", "valor_total": round(valor_total, 2)}
 
 
 @router.get("/dividendos/{ticker}")
 def listar_dividendos(ticker: str, db: Session = Depends(get_db)):
-    items = db.query(Dividendo).filter(Dividendo.ticker == ticker.upper()).order_by(desc(Dividendo.data_pagamento)).all()
-    return [{"id": i.id, "ticker": i.ticker, "valor_por_cota": i.valor_por_cota,
-             "quantidade_cotas": i.quantidade_cotas, "valor_total": i.valor_total,
-             "data_pagamento": str(i.data_pagamento), "tipo": i.tipo} for i in items]
+    items = (
+        db.query(Dividendo)
+        .filter(Dividendo.ticker == ticker.upper())
+        .order_by(desc(Dividendo.data_pagamento))
+        .all()
+    )
+    return [
+        {
+            "id": i.id,
+            "ticker": i.ticker,
+            "valor_por_cota": i.valor_por_cota,
+            "quantidade_cotas": i.quantidade_cotas,
+            "valor_total": i.valor_total,
+            "data_pagamento": str(i.data_pagamento),
+            "tipo": i.tipo,
+        }
+        for i in items
+    ]
 
 
 @router.get("/dividendos")
 def listar_todos_dividendos(db: Session = Depends(get_db)):
     items = db.query(Dividendo).order_by(desc(Dividendo.data_pagamento)).all()
-    return [{"id": i.id, "ticker": i.ticker, "valor_por_cota": i.valor_por_cota,
-             "quantidade_cotas": i.quantidade_cotas, "valor_total": i.valor_total,
-             "data_pagamento": str(i.data_pagamento), "tipo": i.tipo} for i in items]
+    return [
+        {
+            "id": i.id,
+            "ticker": i.ticker,
+            "valor_por_cota": i.valor_por_cota,
+            "quantidade_cotas": i.quantidade_cotas,
+            "valor_total": i.valor_total,
+            "data_pagamento": str(i.data_pagamento),
+            "tipo": i.tipo,
+        }
+        for i in items
+    ]
 
 
 @router.get("/retorno-total/{ticker}")
 async def retorno_total(ticker: str, db: Session = Depends(get_db)):
     ticker = ticker.upper()
-    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo).first()
     if not ativo:
         raise HTTPException(status_code=404, detail="Ativo não encontrado")
 
-    result = db.query(func.sum(Dividendo.valor_total), func.count(Dividendo.id)).filter(Dividendo.ticker == ticker).one()
+    result = (
+        db.query(func.sum(Dividendo.valor_total), func.count(Dividendo.id))
+        .filter(Dividendo.ticker == ticker)
+        .one()
+    )
     total_dividendos = result[0] or 0
     qtd_proventos = result[1] or 0
 
@@ -91,7 +121,7 @@ async def retorno_total(ticker: str, db: Session = Depends(get_db)):
 @router.post("/dividendos/importar/{ticker}")
 def importar_dividendos(ticker: str, db: Session = Depends(get_db)):
     ticker = ticker.upper()
-    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo).first()
     if not ativo:
         raise HTTPException(status_code=404, detail="Ativo não encontrado na carteira")
 
@@ -107,21 +137,27 @@ def importar_dividendos(ticker: str, db: Session = Depends(get_db)):
         importados, ignorados = 0, 0
         for data, valor in divs.items():
             data_obj = date.fromisoformat(str(data)[:10])
-            existente = db.query(Dividendo).filter(
-                Dividendo.ticker == ticker,
-                Dividendo.data_pagamento == data_obj,
-            ).first()
+            existente = (
+                db.query(Dividendo)
+                .filter(
+                    Dividendo.ticker == ticker,
+                    Dividendo.data_pagamento == data_obj,
+                )
+                .first()
+            )
             if existente:
                 ignorados += 1
                 continue
-            db.add(Dividendo(
-                ticker=ticker,
-                valor_por_cota=float(valor),
-                quantidade_cotas=ativo.quantidade,
-                valor_total=float(valor) * ativo.quantidade,
-                data_pagamento=data_obj,
-                tipo="AUTO",
-            ))
+            db.add(
+                Dividendo(
+                    ticker=ticker,
+                    valor_por_cota=float(valor),
+                    quantidade_cotas=ativo.quantidade,
+                    valor_total=float(valor) * ativo.quantidade,
+                    data_pagamento=data_obj,
+                    tipo="AUTO",
+                )
+            )
             importados += 1
 
         db.commit()
@@ -137,7 +173,7 @@ def importar_dividendos(ticker: str, db: Session = Depends(get_db)):
 
 @router.post("/dividendos/importar-todos")
 def importar_todos_dividendos(db: Session = Depends(get_db)):
-    ativos = db.query(Ativo).filter(Ativo.ativo == True).all()
+    ativos = db.query(Ativo).filter(Ativo.ativo).all()
     resultados = []
     for ativo in ativos:
         try:
@@ -150,20 +186,26 @@ def importar_todos_dividendos(db: Session = Depends(get_db)):
             importados = 0
             for data, valor in divs.items():
                 data_obj = date.fromisoformat(str(data)[:10])
-                existente = db.query(Dividendo).filter(
-                    Dividendo.ticker == ativo.ticker,
-                    Dividendo.data_pagamento == data_obj,
-                ).first()
+                existente = (
+                    db.query(Dividendo)
+                    .filter(
+                        Dividendo.ticker == ativo.ticker,
+                        Dividendo.data_pagamento == data_obj,
+                    )
+                    .first()
+                )
                 if existente:
                     continue
-                db.add(Dividendo(
-                    ticker=ativo.ticker,
-                    valor_por_cota=float(valor),
-                    quantidade_cotas=ativo.quantidade,
-                    valor_total=float(valor) * ativo.quantidade,
-                    data_pagamento=data_obj,
-                    tipo="AUTO",
-                ))
+                db.add(
+                    Dividendo(
+                        ticker=ativo.ticker,
+                        valor_por_cota=float(valor),
+                        quantidade_cotas=ativo.quantidade,
+                        valor_total=float(valor) * ativo.quantidade,
+                        data_pagamento=data_obj,
+                        tipo="AUTO",
+                    )
+                )
                 importados += 1
             db.commit()
             if importados > 0:

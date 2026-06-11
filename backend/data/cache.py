@@ -1,12 +1,15 @@
 import sqlite3
 from datetime import datetime, timedelta
+
 from backend.data.brapi import buscar_preco as buscar_preco_api
 
 DB_PATH = "finboard.db"
 TTL_MINUTOS = 15
 
+
 def get_conn():
     return sqlite3.connect(DB_PATH)
+
 
 def preco_em_cache(ticker: str) -> dict | None:
     """Verifica se há preço válido no cache (menos de 15 min)."""
@@ -14,12 +17,15 @@ def preco_em_cache(ticker: str) -> dict | None:
         conn = get_conn()
         cursor = conn.cursor()
         limite = (datetime.now() - timedelta(minutes=TTL_MINUTOS)).isoformat()
-        row = cursor.execute("""
+        row = cursor.execute(
+            """
             SELECT ticker, preco, variacao_dia, volume, moeda, fonte, atualizado_em
             FROM precos_cache
             WHERE ticker=? AND atualizado_em > ?
             ORDER BY atualizado_em DESC LIMIT 1
-        """, (ticker, limite)).fetchone()
+        """,
+            (ticker, limite),
+        ).fetchone()
         conn.close()
         if row:
             return {
@@ -30,11 +36,12 @@ def preco_em_cache(ticker: str) -> dict | None:
                 "moeda": row[4],
                 "fonte": row[5] + "_cache",
                 "atualizado_em": row[6],
-                "cache": True
+                "cache": True,
             }
         return None
     except Exception:
         return None
+
 
 def salvar_cache(ticker: str, dados: dict):
     """Salva preço no cache — UPSERT por ticker."""
@@ -52,20 +59,27 @@ def salvar_cache(ticker: str, dados: dict):
         )
         row = cursor.execute("SELECT id FROM precos_cache WHERE ticker=?", (ticker,)).fetchone()
         if row:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE precos_cache
                 SET preco=?, variacao_dia=?, volume=?, moeda=?, fonte=?, atualizado_em=?
                 WHERE ticker=?
-            """, (*values, ticker))
+            """,
+                (*values, ticker),
+            )
         else:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO precos_cache (ticker, preco, variacao_dia, volume, moeda, fonte, atualizado_em)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (ticker, *values))
+            """,
+                (ticker, *values),
+            )
         conn.commit()
         conn.close()
     except Exception:
         pass
+
 
 async def buscar_preco_com_cache(ticker: str, mercado: str = "BR") -> dict:
     """
@@ -87,6 +101,7 @@ async def buscar_preco_com_cache(ticker: str, mercado: str = "BR") -> dict:
 
     return dados
 
+
 def limpar_cache_antigo():
     """Remove entradas de cache com mais de 24 horas."""
     try:
@@ -97,6 +112,7 @@ def limpar_cache_antigo():
         conn.close()
     except Exception:
         pass
+
 
 def invalidar_cache(ticker: str = None):
     """Invalida cache de um ticker ou de todos."""

@@ -1,0 +1,42 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes (imports não usados, variáveis indefinidas)
+    "I",    # isort (ordem de imports)
+    "B",    # flake8-bugbear (bugs comuns)
+    "UP",   # pyupgrade (sintaxe moderna)
+    "ASYNC",# regras async (await em lugar errado, bloqueio de event loop)
+]
+ignore = [
+    "E501",  # line too long (ruff-format cuida disso)
+    "B008",  # do not perform function calls in default arguments (FastAPI usa Depends() assim)
+    "B904",  # raise from (nem sempre aplicável)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/main.py" = ["E402"]  # ssl_patch deve ser importado antes do yfinance
+
+[tool.mypy]
+explicit_package_bases = true
+ignore_missing_imports = true
+no_strict_optional = true
+
+# SQLAlchemy ORM gera falsos positivos massivos sem sqlalchemy2-stubs:
+# Column[str] vs str, Column[bool] vs bool, Base como tipo inválido, etc.
+# Silencia esses módulos e mantém checagem nos módulos de scoring/data puros.
+[[tool.mypy.overrides]]
+module = [
+    "backend.database",
+    "backend.models_extra",
+    "backend.routers.*",
+    "backend.scorer_job",
+]
+ignore_errors = true

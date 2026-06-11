@@ -1,19 +1,23 @@
 import asyncio
 import logging
+from datetime import datetime
+
+from backend.scoring.macro import calcular_regime_macro, get_score_macro
 from backend.scoring.momento import calcular_momento
 from backend.scoring.valuation import calcular_valuation
-from backend.scoring.macro import calcular_regime_macro, get_score_macro
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-PESOS_PADRAO = {
-    "valuation": 0.40,
-    "momento": 0.30,
-    "macro": 0.30
-}
+PESOS_PADRAO = {"valuation": 0.40, "momento": 0.30, "macro": 0.30}
 
-async def calcular_score_final(ticker: str, classe: str = "ACAO", mercado: str = "BR", pesos: dict = None, macro_info: dict = None) -> dict:
+
+async def calcular_score_final(
+    ticker: str,
+    classe: str = "ACAO",
+    mercado: str = "BR",
+    pesos: dict = None,
+    macro_info: dict = None,
+) -> dict:
     if pesos is None:
         pesos = PESOS_PADRAO
 
@@ -23,8 +27,7 @@ async def calcular_score_final(ticker: str, classe: str = "ACAO", mercado: str =
         macro_info = await calcular_regime_macro()
 
     s_valuation, s_momento = await asyncio.gather(
-        calcular_valuation(ticker, classe, mercado),
-        calcular_momento(ticker, mercado)
+        calcular_valuation(ticker, classe, mercado), calcular_momento(ticker, mercado)
     )
 
     s_macro = await get_score_macro(classe, macro_info, ticker=ticker)
@@ -35,12 +38,7 @@ async def calcular_score_final(ticker: str, classe: str = "ACAO", mercado: str =
     m = m if m is not None else 5.0
     mac = s_macro
 
-    score_final = round(
-        v   * pesos["valuation"] +
-        m   * pesos["momento"]  +
-        mac * pesos["macro"],
-        1
-    )
+    score_final = round(v * pesos["valuation"] + m * pesos["momento"] + mac * pesos["macro"], 1)
 
     return {
         "ticker": ticker,
@@ -55,8 +53,9 @@ async def calcular_score_final(ticker: str, classe: str = "ACAO", mercado: str =
         "detalhes_valuation": s_valuation.get("detalhes", {}),
         "detalhes_momento": s_momento.get("detalhes", {}),
         "detalhes_macro": macro_info["detalhes"],
-        "calculado_em": datetime.now().isoformat()
+        "calculado_em": datetime.now().isoformat(),
     }
+
 
 async def calcular_scores_carteira(ativos: list, pesos: dict = None) -> list:
     if not ativos:
@@ -73,19 +72,17 @@ async def calcular_scores_carteira(ativos: list, pesos: dict = None) -> list:
                 ativo.get("classe", "ACAO"),
                 ativo.get("mercado", "BR"),
                 pesos,
-                macro_info
+                macro_info,
             )
 
-    resultados_raw = await asyncio.gather(
-        *[sem_task(a) for a in ativos], return_exceptions=True
-    )
+    resultados_raw = await asyncio.gather(*[sem_task(a) for a in ativos], return_exceptions=True)
 
-    resultados = []
+    resultados: list[dict] = []
     for i, res in enumerate(resultados_raw):
         if isinstance(res, Exception):
             logger.error("Erro em %s: %s", ativos[i]["ticker"], res)
         else:
-            resultados.append(res)
+            resultados.append(res)  # type: ignore[arg-type]
 
     resultados.sort(key=lambda x: x["score_final"], reverse=True)
     return resultados

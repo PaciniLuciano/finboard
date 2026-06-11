@@ -1,18 +1,18 @@
 import json
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional
 
-from backend.database import get_db, Configuracao
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from backend.database import Configuracao, get_db
 
 router = APIRouter()
 
 
 class ConfigInput(BaseModel):
-    selic_previsao_12m: Optional[float] = None
-    selic_pessimista: Optional[float] = None
-    selic_otimista: Optional[float] = None
+    selic_previsao_12m: float | None = None
+    selic_pessimista: float | None = None
+    selic_otimista: float | None = None
     fonte_selic: str = "manual"
 
 

@@ -1,8 +1,10 @@
-import yfinance as yf
 import time
 
+import yfinance as yf
+
 _HISTORY_TTL = 30 * 60  # 30 minutos — dados intraday suficiente
-_cache: dict = {}        # chave: (ticker_yf, periodo)
+_cache: dict = {}  # chave: (ticker_yf, periodo)
+
 
 def buscar_historico(ticker: str, mercado: str = "BR", periodo: str = "1y") -> dict:
     ticker_yf = f"{ticker.upper()}.SA" if mercado == "BR" else ticker.upper()
@@ -20,13 +22,15 @@ def buscar_historico(ticker: str, mercado: str = "BR", periodo: str = "1y") -> d
     volumes = []
     for data, row in hist.iterrows():
         d = str(data)[:10]
-        candles.append({
-            "time": d,
-            "open":  round(float(row["Open"]),  2),
-            "high":  round(float(row["High"]),  2),
-            "low":   round(float(row["Low"]),   2),
-            "close": round(float(row["Close"]), 2),
-        })
+        candles.append(
+            {
+                "time": d,
+                "open": round(float(row["Open"]), 2),
+                "high": round(float(row["High"]), 2),
+                "low": round(float(row["Low"]), 2),
+                "close": round(float(row["Close"]), 2),
+            }
+        )
         volumes.append({"time": d, "value": int(row["Volume"])})
 
     resultado = {

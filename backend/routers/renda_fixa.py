@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
 from datetime import date
 
-from backend.database import get_db, RendaFixa
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from backend.database import RendaFixa, get_db
 
 router = APIRouter()
 
@@ -37,4 +38,4 @@ def cadastrar_rf(rf: RendaFixaCreate, db: Session = Depends(get_db)):
 
 @router.get("/renda-fixa")
 def listar_rf(db: Session = Depends(get_db)):
-    return db.query(RendaFixa).filter(RendaFixa.ativo == True).all()
+    return db.query(RendaFixa).filter(RendaFixa.ativo).all()

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+
 from backend.data.brapi import buscar_cambio_usd_brl, buscar_ibovespa
 from backend.data.cache import buscar_preco_com_cache as buscar_preco
 
@@ -23,6 +24,7 @@ async def cambio():
 @router.get("/history/{ticker}")
 def historico_ativo(ticker: str, mercado: str = "BR", periodo: str = "1y"):
     from backend.data.history import buscar_historico
+
     try:
         return buscar_historico(ticker, mercado, periodo)
     except ValueError as e:
