@@ -106,6 +106,22 @@ class Dividendo(Base):
     data_pagamento = Column(Date)
     tipo = Column(String, default="PROVENTO")
 
+class AtivoMaster(Base):
+    __tablename__ = "ativos_master"
+    ticker             = Column(String, primary_key=True)
+    nome               = Column(String)
+    classe             = Column(String)
+    segmento           = Column(String)
+    setor_yf           = Column(String)
+    industria_yf       = Column(String)
+    pais               = Column(String)
+    moeda              = Column(String)
+    descricao          = Column(String)
+    market_cap         = Column(Float)
+    beta               = Column(Float)
+    data_cadastro      = Column(String)
+    ultima_atualizacao = Column(String)
+
 # ── CRIAR TABELAS ────────────────────────────────────────
 
 def criar_banco():

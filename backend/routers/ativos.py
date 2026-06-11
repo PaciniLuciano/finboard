@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-from datetime import date
+from datetime import date, timedelta
 import asyncio
 
-from backend.database import get_db, Ativo
+from backend.database import get_db, Ativo, AtivoMaster
 from backend.data.cache import buscar_preco_com_cache as buscar_preco, salvar_cache
 from backend.data.brapi import buscar_cambio_usd_brl
+from backend.data.enrich import enrich_ticker, enriquecer_e_salvar
 
 router = APIRouter()
 
@@ -45,9 +46,79 @@ class AtivoUpdate(BaseModel):
     data_compra: Optional[date] = None
 
 
+def _deve_enriquecer(ticker: str, db: Session) -> bool:
+    """Retorna True se o ticker precisa ser enriquecido (inexistente ou > 30 dias)."""
+    try:
+        master = db.query(AtivoMaster).filter(AtivoMaster.ticker == ticker).first()
+        if not master or not master.ultima_atualizacao:
+            return True
+        ultima = date.fromisoformat(master.ultima_atualizacao)
+        return (date.today() - ultima).days > 30
+    except Exception:
+        return True
+
+
+# ── MASTER DATA ───────────────────────────────────────────
+
+@router.get("/ativos/master")
+def listar_master(db: Session = Depends(get_db)):
+    registros = db.query(AtivoMaster).all()
+    return [
+        {
+            "ticker": r.ticker, "nome": r.nome, "classe": r.classe,
+            "segmento": r.segmento, "setor_yf": r.setor_yf,
+            "industria_yf": r.industria_yf, "pais": r.pais, "moeda": r.moeda,
+            "market_cap": r.market_cap, "beta": r.beta,
+            "data_cadastro": r.data_cadastro, "ultima_atualizacao": r.ultima_atualizacao,
+        }
+        for r in registros
+    ]
+
+
+@router.get("/ativos/master/{ticker}")
+def get_master(ticker: str, db: Session = Depends(get_db)):
+    master = db.query(AtivoMaster).filter(AtivoMaster.ticker == ticker.upper()).first()
+    if not master:
+        raise HTTPException(status_code=404, detail=f"Master data de {ticker.upper()} nao encontrado")
+    return {
+        "ticker": master.ticker, "nome": master.nome, "classe": master.classe,
+        "segmento": master.segmento, "setor_yf": master.setor_yf,
+        "industria_yf": master.industria_yf, "pais": master.pais, "moeda": master.moeda,
+        "descricao": master.descricao, "market_cap": master.market_cap, "beta": master.beta,
+        "data_cadastro": master.data_cadastro, "ultima_atualizacao": master.ultima_atualizacao,
+    }
+
+
+@router.post("/ativos/master/{ticker}/atualizar")
+async def atualizar_master(ticker: str, classe: str = "ACAO", db: Session = Depends(get_db)):
+    ticker = ticker.upper()
+    ativo = db.query(Ativo).filter(Ativo.ticker == ticker).first()
+    if ativo:
+        classe = ativo.classe
+    else:
+        from backend.database import Watchlist
+        wl = db.query(Watchlist).filter(Watchlist.ticker == ticker).first()
+        if wl:
+            classe = wl.classe
+
+    dados = await enrich_ticker(ticker, classe)
+    existente = db.query(AtivoMaster).filter(AtivoMaster.ticker == ticker).first()
+    if existente:
+        for k, v in dados.items():
+            if k != "data_cadastro":
+                setattr(existente, k, v)
+    else:
+        db.add(AtivoMaster(**dados))
+    db.commit()
+    return dados
+
+
+# ── CARTEIRA ──────────────────────────────────────────────
+
 @router.post("/ativos")
-def cadastrar_ativo(ativo: AtivoCreate, db: Session = Depends(get_db)):
-    existente = db.query(Ativo).filter(Ativo.ticker == ativo.ticker.upper()).first()
+def cadastrar_ativo(ativo: AtivoCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    ticker = ativo.ticker.upper()
+    existente = db.query(Ativo).filter(Ativo.ticker == ticker).first()
     if existente:
         if existente.ativo == False:
             existente.ativo = True
@@ -59,11 +130,13 @@ def cadastrar_ativo(ativo: AtivoCreate, db: Session = Depends(get_db)):
             existente.moeda = ativo.moeda
             existente.data_compra = ativo.data_compra
             db.commit()
-            return {"mensagem": f"Ativo {ativo.ticker.upper()} reativado com sucesso", "id": existente.id}
-        raise HTTPException(status_code=400, detail=f"Ticker {ativo.ticker} já cadastrado")
+            if _deve_enriquecer(ticker, db):
+                background_tasks.add_task(enriquecer_e_salvar, ticker, ativo.classe)
+            return {"mensagem": f"Ativo {ticker} reativado com sucesso", "id": existente.id}
+        raise HTTPException(status_code=400, detail=f"Ticker {ticker} ja cadastrado")
 
     novo = Ativo(
-        ticker=ativo.ticker.upper(),
+        ticker=ticker,
         nome=ativo.nome,
         classe=ativo.classe,
         mercado=ativo.mercado,
@@ -75,7 +148,11 @@ def cadastrar_ativo(ativo: AtivoCreate, db: Session = Depends(get_db)):
     db.add(novo)
     db.commit()
     db.refresh(novo)
-    return {"mensagem": f"Ativo {ativo.ticker.upper()} cadastrado com sucesso", "id": novo.id}
+
+    if _deve_enriquecer(ticker, db):
+        background_tasks.add_task(enriquecer_e_salvar, ticker, ativo.classe)
+
+    return {"mensagem": f"Ativo {ticker} cadastrado com sucesso", "id": novo.id}
 
 
 @router.get("/ativos")
@@ -94,7 +171,6 @@ async def listar_ativos(db: Session = Depends(get_db)):
 
         em_dolar = (a.moeda == "USD") or (a.mercado == "EUA")
 
-        # Converte preços unitários para BRL para exibição e cálculo de valores
         preco_atual_brl = preco_usd * cambio if a.mercado == "EUA" else preco_usd
         pm_brl = pm * cambio if em_dolar else pm
 
@@ -129,12 +205,12 @@ def atualizar_preco_manual(ticker: str, preco_data: dict, db: Session = Depends(
     ticker = ticker.upper()
     ativo = db.query(Ativo).filter(Ativo.ticker == ticker, Ativo.ativo == True).first()
     if not ativo:
-        raise HTTPException(status_code=404, detail="Ativo não encontrado")
+        raise HTTPException(status_code=404, detail="Ativo nao encontrado")
     novo_preco = preco_data.get("preco")
     if novo_preco is None:
-        raise HTTPException(status_code=400, detail="Preço não informado")
+        raise HTTPException(status_code=400, detail="Preco nao informado")
     salvar_cache(ticker, {"preco": novo_preco, "fonte": "manual", "variacao_dia": 0})
-    return {"mensagem": f"Preço de {ticker} atualizado para R$ {novo_preco}"}
+    return {"mensagem": f"Preco de {ticker} atualizado para R$ {novo_preco}"}
 
 
 @router.put("/ativos/{ticker}")
@@ -143,7 +219,7 @@ def editar_ativo(ticker: str, dados: AtivoUpdate, db: Session = Depends(get_db))
         Ativo.ticker == ticker.upper(), Ativo.ativo == True
     ).first()
     if not ativo:
-        raise HTTPException(status_code=404, detail="Ativo não encontrado")
+        raise HTTPException(status_code=404, detail="Ativo nao encontrado")
 
     if dados.nome is not None:        ativo.nome = dados.nome
     if dados.classe is not None:      ativo.classe = dados.classe
@@ -162,7 +238,7 @@ def editar_ativo(ticker: str, dados: AtivoUpdate, db: Session = Depends(get_db))
 def remover_ativo(ticker: str, db: Session = Depends(get_db)):
     ativo = db.query(Ativo).filter(Ativo.ticker == ticker.upper()).first()
     if not ativo:
-        raise HTTPException(status_code=404, detail="Ativo não encontrado")
+        raise HTTPException(status_code=404, detail="Ativo nao encontrado")
     ativo.ativo = False
     db.commit()
     return {"mensagem": f"Ativo {ticker.upper()} removido"}

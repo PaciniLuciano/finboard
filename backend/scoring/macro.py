@@ -33,7 +33,35 @@ TICKER_SETOR = {
     "RECR": "FII_PAPEL", "BCFF": "FII_PAPEL",
 }
 
+SEGMENTO_PARA_AJUSTE = {
+    "BANCO_FINANCEIRO":       "BANCO",
+    "SEGURO_FINANCEIRO":      "SEGURO",
+    "VAREJO_CONSUMO":         "VAREJO",
+    "CONSTRUCAO_IMOBILIARIA": "CONSTRUTORA",
+    "TECNOLOGIA":             "TECH",
+    "PETROLEO_GAS":           "COMMODITY",
+    "MINERACAO_SIDERURGIA":   "COMMODITY",
+    "AGRO_ALIMENTOS":         "COMMODITY",
+    "PAPEL_CELULOSE":         "COMMODITY",
+    "FII_PAPEL":              "FII_PAPEL",
+}
+
 def detectar_setor(ticker: str) -> str | None:
+    # Prioridade: ativos_master (segmento enriquecido via yfinance)
+    try:
+        import sqlite3
+        conn = sqlite3.connect("finboard.db")
+        row = conn.execute(
+            "SELECT segmento FROM ativos_master WHERE ticker=?", (ticker.upper(),)
+        ).fetchone()
+        conn.close()
+        if row and row[0]:
+            mapeado = SEGMENTO_PARA_AJUSTE.get(row[0])
+            if mapeado:
+                return mapeado
+    except Exception:
+        pass
+    # Fallback: dicionario hardcoded (primeiros 4 caracteres)
     return TICKER_SETOR.get(ticker[:4].upper())
 
 # Cache in-memory para dados macro — TTL 6h
