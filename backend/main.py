@@ -26,7 +26,7 @@ def startup():
     _logging.getLogger("backend").setLevel(_logging.DEBUG)
     criar_banco()
     iniciar_job()
-    print("✓ Finboard iniciado")
+    print("[OK] Finboard iniciado")
 
 
 app.include_router(ativos.router)

@@ -110,7 +110,7 @@ class Dividendo(Base):
 
 def criar_banco():
     Base.metadata.create_all(bind=engine)
-    print("✓ Banco de dados criado com sucesso")
+    print("[OK] Banco de dados criado com sucesso")
 
 def get_db():
     db = SessionLocal()
