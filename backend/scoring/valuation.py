@@ -19,7 +19,9 @@ def obter_selic_cache() -> float | None:
     return None
 
 
-async def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "BR") -> dict:
+async def calcular_valuation(
+    ticker: str, classe: str = "ACAO", mercado: str = "BR", setor: str | None = None
+) -> dict:
     try:
         ticker_yf = f"{ticker}.SA" if mercado == "BR" else ticker
 
@@ -95,23 +97,36 @@ async def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "
                 if float(margem) * 100 > 10:
                     pontos += 1
 
-            # ROIC estimado — taxa de imposto Brasil: 34%
-            operating_income = info.get("operatingIncome") or 0
-            total_debt = info.get("totalDebt") or 0
-            stockholder_equity = info.get("totalStockholderEquity") or 0
-            capital_investido = stockholder_equity + total_debt
+            # ROIC estimado — bancos usam ROE como proxy (operatingIncome não aplicável)
+            if setor == "BANCO":
+                roe_raw = info.get("returnOnEquity")
+                if roe_raw:
+                    roe_proxy = float(roe_raw) * 100
+                    roic_estimado = round(roe_proxy, 1)
+                    detalhes["roic_estimado"] = roic_estimado
+                    if roe_proxy > 20:
+                        pontos += 3
+                    elif roe_proxy > 15:
+                        pontos += 2
+                    elif roe_proxy > 10:
+                        pontos += 1
+            else:
+                # Taxa de imposto estimada Brasil: 34%
+                operating_income = info.get("operatingIncome") or 0
+                total_debt = info.get("totalDebt") or 0
+                stockholder_equity = info.get("totalStockholderEquity") or 0
+                capital_investido = stockholder_equity + total_debt
 
-            if capital_investido > 0 and operating_income > 0:
-                roic = (operating_income * (1 - 0.34)) / capital_investido * 100
-                roic_estimado = round(roic, 1)
-                detalhes["roic_estimado"] = roic_estimado
-
-                if roic > 20:
-                    pontos += 3
-                elif roic > 15:
-                    pontos += 2
-                elif roic > 10:
-                    pontos += 1
+                if capital_investido > 0 and operating_income > 0:
+                    roic = (operating_income * (1 - 0.34)) / capital_investido * 100
+                    roic_estimado = round(roic, 1)
+                    detalhes["roic_estimado"] = roic_estimado
+                    if roic > 20:
+                        pontos += 3
+                    elif roic > 15:
+                        pontos += 2
+                    elif roic > 10:
+                        pontos += 1
 
         elif classe == "FII":
             max_pontos = 8

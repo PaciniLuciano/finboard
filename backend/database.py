@@ -142,6 +142,27 @@ def criar_banco():
     print("[OK] Banco de dados criado com sucesso")
 
 
+def migrar_banco():
+    """Adiciona colunas novas a tabelas existentes sem apagar dados (idempotente)."""
+    from sqlalchemy import text
+
+    novas = [
+        ("scores_cache", "earnings_yield", "REAL"),
+        ("scores_cache", "spread_selic", "REAL"),
+        ("scores_cache", "roic_estimado", "REAL"),
+        ("scores_cache", "sinal_oportunidade", "TEXT"),
+        ("scores_cache", "selic_usada", "REAL"),
+    ]
+    with engine.connect() as conn:
+        for tabela, coluna, tipo in novas:
+            try:
+                conn.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}"))
+                conn.commit()
+                print(f"[migração] {tabela}.{coluna} adicionada")
+            except Exception:
+                pass  # coluna já existe
+
+
 def get_db():
     db = SessionLocal()
     try:

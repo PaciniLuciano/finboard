@@ -55,6 +55,11 @@ async def radar(origem: str = "carteira", forcar: bool = False, db: Session = De
             "score_macro": s.score_macro,
             "regime_macro": s.regime_macro,
             "sinal": s.sinal,
+            "earnings_yield": s.earnings_yield,
+            "spread_selic": s.spread_selic,
+            "roic_estimado": s.roic_estimado,
+            "sinal_oportunidade": s.sinal_oportunidade,
+            "selic_usada": s.selic_usada,
             "calculado_em": s.calculado_em.isoformat() if s.calculado_em else None,
         }
         for s in sorted(cache, key=lambda x: x.score_final, reverse=True)

@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.database import criar_banco
+from backend.database import criar_banco, migrar_banco
 from backend.routers import (
     ativos,
     carteira,
@@ -33,6 +33,7 @@ def startup():
 
     _logging.getLogger("backend").setLevel(_logging.DEBUG)
     criar_banco()
+    migrar_banco()
     iniciar_job()
     print("[OK] Finboard iniciado")
 

@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime
 
-from backend.scoring.macro import calcular_regime_macro, get_score_macro
+from backend.scoring.macro import calcular_regime_macro, detectar_setor, get_score_macro
 from backend.scoring.momento import calcular_momento
 from backend.scoring.valuation import calcular_valuation
 
@@ -51,8 +51,9 @@ async def calcular_score_final(
     if macro_info is None:
         macro_info = await calcular_regime_macro()
 
+    setor = detectar_setor(ticker)
     s_valuation, s_momento = await asyncio.gather(
-        calcular_valuation(ticker, classe, mercado), calcular_momento(ticker, mercado)
+        calcular_valuation(ticker, classe, mercado, setor), calcular_momento(ticker, mercado)
     )
 
     s_macro = await get_score_macro(classe, macro_info, ticker=ticker)

@@ -51,6 +51,11 @@ async def atualizar_scores():
                         regime_macro=s["regime_macro"],
                         sinal=calcular_sinal(s["score_final"]),
                         detalhes=json.dumps(s.get("detalhes_momento", {})),
+                        earnings_yield=s.get("earnings_yield"),
+                        spread_selic=s.get("spread_selic"),
+                        roic_estimado=s.get("roic_estimado"),
+                        sinal_oportunidade=s.get("sinal_oportunidade"),
+                        selic_usada=s.get("selic_usada"),
                         calculado_em=datetime.now(),
                     )
                 )
