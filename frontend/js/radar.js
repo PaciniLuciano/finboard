@@ -26,6 +26,8 @@ async function carregarRadar(forcar = false) {
 
     _radarCache[radarFonte] = data;
     renderRadar(data);
+    // Após calcular watchlist, oculta lista de gestão para não duplicar os tickers na tela
+    if (radarFonte === 'watchlist') _ocultarListaWatchlist();
   } catch (e) {
     content.innerHTML = '<div class="alert alert-red">Erro ao carregar radar.</div>';
   }
@@ -256,7 +258,13 @@ function switchRadarFonte(btn, fonte) {
 
   if (fonte === 'watchlist') {
     document.getElementById('watchlist-panel').style.display = 'block';
-    carregarWatchlist();
+    if (_radarCache.watchlist) {
+      // Scores já calculados: oculta a lista de tickers para não duplicar com o radar
+      _ocultarListaWatchlist();
+    } else {
+      // Sem scores: mostra a lista de gestão para o usuário saber o que está na watchlist
+      carregarWatchlist();
+    }
   } else {
     document.getElementById('watchlist-panel').style.display = 'none';
   }
@@ -267,4 +275,9 @@ function switchRadarFonte(btn, fonte) {
     document.getElementById('radar-content').innerHTML =
       '<div class="loading">Clique em Calcular para analisar.</div>';
   }
+}
+
+function _ocultarListaWatchlist() {
+  const el = document.getElementById('watchlist-lista');
+  if (el) el.innerHTML = '<span style="font-size:11px;color:#aaa;cursor:pointer;" onclick="carregarWatchlist()">↺ Ver / gerenciar itens da watchlist</span>';
 }

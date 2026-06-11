@@ -52,8 +52,10 @@ async def calcular_score_final(
         macro_info = await calcular_regime_macro()
 
     setor = detectar_setor(ticker)
+    selic_atual = macro_info.get("detalhes", {}).get("selic_atual")
     s_valuation, s_momento = await asyncio.gather(
-        calcular_valuation(ticker, classe, mercado, setor), calcular_momento(ticker, mercado)
+        calcular_valuation(ticker, classe, mercado, setor, selic_atual),
+        calcular_momento(ticker, mercado),
     )
 
     s_macro = await get_score_macro(classe, macro_info, ticker=ticker)

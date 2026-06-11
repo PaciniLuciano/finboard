@@ -20,7 +20,11 @@ def obter_selic_cache() -> float | None:
 
 
 async def calcular_valuation(
-    ticker: str, classe: str = "ACAO", mercado: str = "BR", setor: str | None = None
+    ticker: str,
+    classe: str = "ACAO",
+    mercado: str = "BR",
+    setor: str | None = None,
+    selic_atual: float | None = None,
 ) -> dict:
     try:
         ticker_yf = f"{ticker}.SA" if mercado == "BR" else ticker
@@ -39,8 +43,9 @@ async def calcular_valuation(
 
         if classe == "ACAO":
             max_pontos = 14
-            selic_atual = obter_selic_cache() or 13.75
-            selic_usada = selic_atual
+            # Prioridade: parâmetro do engine → cache macro → fallback conservador
+            selic = selic_atual if selic_atual is not None else (obter_selic_cache() or 13.75)
+            selic_usada = selic
 
             pl = info.get("trailingPE") or info.get("forwardPE")
             if pl:
@@ -48,7 +53,7 @@ async def calcular_valuation(
                 detalhes["pl"] = round(pl, 2)
                 if pl > 0:
                     ey = (1 / pl) * 100
-                    spread = ey - selic_atual
+                    spread = ey - selic
                     earnings_yield = round(ey, 2)
                     spread_selic = round(spread, 2)
 
@@ -143,10 +148,30 @@ async def calcular_valuation(
                 elif pvp < 1.15:
                     pontos += 1
 
-            dy = info.get("dividendYield")
-            if dy:
-                dy_pct = normalizar_dy(dy)
-                detalhes["dy"] = round(dy_pct, 2)
+            # DY via histórico real — auto_adjust=False evita NaN em FIIs com dividendos mensais
+            dy_pct = 0.0
+            try:
+                hist_fii = await loop.run_in_executor(
+                    None,
+                    lambda: yf.Ticker(ticker_yf).history(period="1y", auto_adjust=False),
+                )
+                if not hist_fii.empty:
+                    divs = float(hist_fii["Dividends"].sum())
+                    closes = hist_fii["Close"].dropna()
+                    preco = float(closes.iloc[-1]) if not closes.empty else 0.0
+                    if divs > 0 and preco > 0:
+                        dy_pct = round((divs / preco) * 100, 2)
+            except Exception:
+                pass
+
+            # Fallback para info["dividendYield"] se histórico retornou zero
+            if dy_pct == 0.0:
+                raw_dy = info.get("dividendYield")
+                if raw_dy:
+                    dy_pct = normalizar_dy(raw_dy)
+
+            if dy_pct > 0:
+                detalhes["dy"] = dy_pct
                 if dy_pct > 10:
                     pontos += 4
                 elif dy_pct > 8:
