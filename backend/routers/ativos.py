@@ -133,6 +133,45 @@ async def atualizar_master(ticker: str, classe: str = "ACAO", db: Session = Depe
     return dados
 
 
+@router.post("/ativos/master/enriquecer-todos")
+async def enriquecer_todos(db: Session = Depends(get_db)):
+    """Enriquece todos os ativos da carteira que ainda não têm entrada em ativos_master."""
+    todos_ativos = db.query(Ativo).filter(Ativo.ativo).all()
+    tickers_master = {m.ticker for m in db.query(AtivoMaster.ticker).all()}
+
+    pendentes = [a for a in todos_ativos if a.ticker not in tickers_master]
+
+    semaforo = asyncio.Semaphore(3)
+    processados = 0
+    erros = 0
+    detalhes: list[dict] = []
+
+    async def processar(ativo: Ativo):
+        nonlocal processados, erros
+        async with semaforo:
+            try:
+                dados = await enrich_ticker(ativo.ticker, ativo.classe)
+                existente = db.query(AtivoMaster).filter(AtivoMaster.ticker == ativo.ticker).first()
+                if existente:
+                    for k, v in dados.items():
+                        if k != "data_cadastro":
+                            setattr(existente, k, v)
+                else:
+                    db.add(AtivoMaster(**dados))
+                db.commit()
+                processados += 1
+                detalhes.append(
+                    {"ticker": ativo.ticker, "status": "ok", "segmento": dados.get("segmento")}
+                )
+            except Exception as e:
+                erros += 1
+                detalhes.append({"ticker": ativo.ticker, "status": "erro", "detalhe": str(e)})
+
+    await asyncio.gather(*[processar(a) for a in pendentes])
+
+    return {"processados": processados, "erros": erros, "detalhes": detalhes}
+
+
 # ── CARTEIRA ──────────────────────────────────────────────
 
 
