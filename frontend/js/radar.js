@@ -127,13 +127,44 @@ function renderRadar(data) {
 
     // Ordena ativos dentro do grupo por score decrescente
     [...ativos].sort((a, b) => b.score_final - a.score_final).forEach(a => {
-      const score   = a.score_final;
-      const sCls    = score >= 7.5 ? 'p-green' : score >= 5.5 ? 'p-gold' : 'p-red';
-      const sinal   = score >= 7.5 ? '★ Forte'  : score >= 5.5 ? '◎ Neutro' : '▼ Fraco';
-      const sinalCls = score >= 7.5 ? 'p-green' : score >= 5.5 ? 'p-gold' : 'p-red';
-      const vCls    = a.score_valuation >= 7 ? 'p-green' : a.score_valuation >= 5 ? 'p-gold' : 'p-red';
-      const mCls    = a.score_momento   >= 7 ? 'p-green' : a.score_momento   >= 5 ? 'p-gold' : 'p-red';
-      const nome    = (_masterMap[a.ticker] || {}).nome || '';
+      const score = a.score_final;
+      const sCls  = score >= 7.5 ? 'p-green' : score >= 5.5 ? 'p-gold' : 'p-red';
+      const vCls  = a.score_valuation >= 7 ? 'p-green' : a.score_valuation >= 5 ? 'p-gold' : 'p-red';
+      const mCls  = a.score_momento   >= 7 ? 'p-green' : a.score_momento   >= 5 ? 'p-gold' : 'p-red';
+      const nome  = (_masterMap[a.ticker] || {}).nome || '';
+
+      // Sinal: badge Damodaran para ACAO, score-based para demais
+      let sinalHtml;
+      if (a.classe === 'ACAO' && a.sinal_oportunidade) {
+        const _sinaisCls = {
+          OPORTUNIDADE:  'p-green',
+          QUALIDADE_CARA: 'p-gold',
+          BARATA_FRACA:  '',
+          NEUTRO:        'p-gray',
+        };
+        const _sinaisLabel = {
+          OPORTUNIDADE:  '★ Oportunidade',
+          QUALIDADE_CARA: '◎ Qualidade Cara',
+          BARATA_FRACA:  '⚠ Barata/Fraca',
+          NEUTRO:        '— Neutro',
+        };
+        const _sinalCls   = _sinaisCls[a.sinal_oportunidade]   || 'p-gray';
+        const _sinalLabel = _sinaisLabel[a.sinal_oportunidade] || a.sinal_oportunidade;
+        const _extraStyle = a.sinal_oportunidade === 'BARATA_FRACA'
+          ? 'background:#D4600A;color:#fff;'
+          : '';
+        const _tipParts = [];
+        if (a.earnings_yield != null) _tipParts.push(`EY: ${a.earnings_yield}%`);
+        if (a.spread_selic   != null) _tipParts.push(`Spread: ${a.spread_selic}%`);
+        if (a.roic_estimado  != null) _tipParts.push(`ROIC: ${a.roic_estimado}%`);
+        const _tip = _tipParts.join(' | ');
+        sinalHtml = `<span class="pill ${_sinalCls}" title="${_tip}" style="${_extraStyle}">${_sinalLabel}</span>`;
+        if (_tip) sinalHtml += `<div style="font-size:9px;color:#888;margin-top:2px;">${_tip}</div>`;
+      } else {
+        const _sinalText = score >= 7.5 ? '★ Forte' : score >= 5.5 ? '◎ Neutro' : '▼ Fraco';
+        const _sinalCls  = score >= 7.5 ? 'p-green'  : score >= 5.5 ? 'p-gold'   : 'p-red';
+        sinalHtml = `<span class="pill ${_sinalCls}">${_sinalText}</span>`;
+      }
 
       html += `<tr>
         <td>
@@ -145,7 +176,7 @@ function renderRadar(data) {
         <td><span class="pill ${mCls}">${a.score_momento}</span></td>
         <td><span class="pill p-blue">${a.score_macro}</span></td>
         <td><span class="pill ${sCls}" style="font-size:13px;padding:4px 10px;">${score}</span></td>
-        <td><span class="pill ${sinalCls}">${sinal}</span></td>
+        <td>${sinalHtml}</td>
       </tr>`;
     });
   });

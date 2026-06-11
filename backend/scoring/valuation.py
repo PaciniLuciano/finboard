@@ -6,6 +6,19 @@ import yfinance as yf
 from backend.scoring.utils import normalizar_dy
 
 
+def obter_selic_cache() -> float | None:
+    """Reutiliza o cache de dados macro para obter Selic atual."""
+    try:
+        from backend.scoring.macro import _macro_cache
+
+        resultado = _macro_cache.get("resultado")
+        if resultado:
+            return resultado.get("detalhes", {}).get("selic_atual")
+    except Exception:
+        pass
+    return None
+
+
 async def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "BR") -> dict:
     try:
         ticker_yf = f"{ticker}.SA" if mercado == "BR" else ticker
@@ -17,17 +30,34 @@ async def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "
         detalhes = {}
         max_pontos = 10
 
+        earnings_yield = None
+        spread_selic = None
+        roic_estimado = None
+        selic_usada = None
+
         if classe == "ACAO":
+            max_pontos = 14
+            selic_atual = obter_selic_cache() or 13.75
+            selic_usada = selic_atual
+
             pl = info.get("trailingPE") or info.get("forwardPE")
             if pl:
                 pl = float(pl)
                 detalhes["pl"] = round(pl, 2)
-                if pl < 8:
-                    pontos += 3
-                elif pl < 12:
-                    pontos += 2
-                elif pl < 20:
-                    pontos += 1
+                if pl > 0:
+                    ey = (1 / pl) * 100
+                    spread = ey - selic_atual
+                    earnings_yield = round(ey, 2)
+                    spread_selic = round(spread, 2)
+
+                    if spread > 8:
+                        pontos += 4
+                    elif spread > 5:
+                        pontos += 3
+                    elif spread > 2:
+                        pontos += 2
+                    elif spread > 0:
+                        pontos += 1
 
             pvp = info.get("priceToBook")
             if pvp:
@@ -48,7 +78,7 @@ async def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "
                 elif 3 < dy_pct <= 6:
                     pontos += 1
                 elif dy_pct > 15:
-                    pontos += 1  # pontua pouco — dado suspeito
+                    pontos += 1
 
             roe = info.get("returnOnEquity")
             if roe:
@@ -63,6 +93,24 @@ async def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "
             if margem:
                 detalhes["margem_liquida"] = round(float(margem) * 100, 2)
                 if float(margem) * 100 > 10:
+                    pontos += 1
+
+            # ROIC estimado — taxa de imposto Brasil: 34%
+            operating_income = info.get("operatingIncome") or 0
+            total_debt = info.get("totalDebt") or 0
+            stockholder_equity = info.get("totalStockholderEquity") or 0
+            capital_investido = stockholder_equity + total_debt
+
+            if capital_investido > 0 and operating_income > 0:
+                roic = (operating_income * (1 - 0.34)) / capital_investido * 100
+                roic_estimado = round(roic, 1)
+                detalhes["roic_estimado"] = roic_estimado
+
+                if roic > 20:
+                    pontos += 3
+                elif roic > 15:
+                    pontos += 2
+                elif roic > 10:
                     pontos += 1
 
         elif classe == "FII":
@@ -126,6 +174,10 @@ async def calcular_valuation(ticker: str, classe: str = "ACAO", mercado: str = "
             "pontos_brutos": pontos,
             "max_pontos": max_pontos,
             "detalhes": detalhes,
+            "earnings_yield": earnings_yield,
+            "spread_selic": spread_selic,
+            "roic_estimado": roic_estimado,
+            "selic_usada": selic_usada,
             "calculado_em": datetime.now().isoformat(),
         }
 

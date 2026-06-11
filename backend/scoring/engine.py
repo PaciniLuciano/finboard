@@ -11,6 +11,31 @@ logger = logging.getLogger(__name__)
 PESOS_PADRAO = {"valuation": 0.40, "momento": 0.30, "macro": 0.30}
 
 
+def calcular_sinal_oportunidade(
+    score_valuation: float,
+    score_momento: float,
+    roic: float | None,
+    spread_selic: float | None,
+    classe: str,
+) -> str | None:
+    """Distingue qualidade de value trap. Só aplicável para ACAO."""
+    if classe != "ACAO":
+        return None
+
+    empresa_forte = (roic is not None and roic > 12) or score_valuation >= 7.0
+    preco_atrativo = spread_selic is not None and spread_selic > 4
+    momentum_ok = score_momento >= 5.0
+
+    if empresa_forte and preco_atrativo and momentum_ok:
+        return "OPORTUNIDADE"
+    elif empresa_forte and not preco_atrativo:
+        return "QUALIDADE_CARA"
+    elif not empresa_forte and preco_atrativo:
+        return "BARATA_FRACA"
+    else:
+        return "NEUTRO"
+
+
 async def calcular_score_final(
     ticker: str,
     classe: str = "ACAO",
@@ -40,6 +65,10 @@ async def calcular_score_final(
 
     score_final = round(v * pesos["valuation"] + m * pesos["momento"] + mac * pesos["macro"], 1)
 
+    roic = s_valuation.get("roic_estimado")
+    spread_selic = s_valuation.get("spread_selic")
+    sinal_oportunidade = calcular_sinal_oportunidade(v, m, roic, spread_selic, classe)
+
     return {
         "ticker": ticker,
         "classe": classe,
@@ -53,6 +82,11 @@ async def calcular_score_final(
         "detalhes_valuation": s_valuation.get("detalhes", {}),
         "detalhes_momento": s_momento.get("detalhes", {}),
         "detalhes_macro": macro_info["detalhes"],
+        "earnings_yield": s_valuation.get("earnings_yield"),
+        "spread_selic": spread_selic,
+        "roic_estimado": roic,
+        "selic_usada": s_valuation.get("selic_usada"),
+        "sinal_oportunidade": sinal_oportunidade,
         "calculado_em": datetime.now().isoformat(),
     }
 
